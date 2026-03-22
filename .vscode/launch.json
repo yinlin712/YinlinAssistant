@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Vibe Coding Agent",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "D:\\VS code\\Microsoft VS Code\\Code.exe",
+      "args": [
+        "--new-window",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "preLaunchTask": "npm: build"
+    },
+    {
+      "name": "Run Vibe Coding Agent (Isolated)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "D:\\VS code\\Microsoft VS Code\\Code.exe",
+      "args": [
+        "--new-window",
+        "--disable-extensions",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "preLaunchTask": "npm: build"
+    }
+  ]
+}

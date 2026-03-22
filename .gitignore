@@ -1,0 +1,15 @@
+# Node / VS Code build output
+node_modules/
+dist/
+out/
+media/webview.js
+*.vsix
+*.log
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Local editor / OS files
+.DS_Store
+.vscode/settings.json

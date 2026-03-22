@@ -1,0 +1,103 @@
+{
+  "name": "vibe-coding-agent",
+  "displayName": "Vibe Coding Agent",
+  "description": "A VS Code AI agent prototype for assisted programming with a Python backend, Ollama integration, VRM avatar hooks, and LoRA-ready model serving.",
+  "version": "0.2.0",
+  "publisher": "graduation-project",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:vibeCodingAgent.start",
+    "onView:vibeCodingAgent.sidebar"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vibeCodingAgent.start",
+        "title": "Vibe Coding Agent: Open Assistant"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vibeCodingAgent",
+          "title": "Vibe Agent",
+          "icon": "backend/icon.jpg"
+        }
+      ]
+    },
+    "views": {
+      "vibeCodingAgent": [
+        {
+          "type": "webview",
+          "id": "vibeCodingAgent.sidebar",
+          "name": "Assistant"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Vibe Coding Agent",
+      "properties": {
+        "vibeCodingAgent.modelProvider": {
+          "type": "string",
+          "default": "local",
+          "enum": [
+            "local",
+            "mock"
+          ],
+          "description": "Choose between the Python agent backend and a mock response mode."
+        },
+        "vibeCodingAgent.systemPrompt": {
+          "type": "string",
+          "default": "You are a calm and capable coding assistant embedded in VS Code. Help with code understanding, generation, debugging, and refactoring.",
+          "description": "System prompt forwarded to the Python agent."
+        },
+        "vibeCodingAgent.enableAvatar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Displays the avatar area in the assistant panel."
+        },
+        "vibeCodingAgent.avatarMode": {
+          "type": "string",
+          "default": "prototype",
+          "enum": [
+            "prototype",
+            "vrm"
+          ],
+          "description": "Avatar rendering mode. Use vrm after integrating a real VRM runtime."
+        },
+        "vibeCodingAgent.localModelEndpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000/generate",
+          "description": "HTTP endpoint exposed by the local Python agent backend."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run build:extension && npm run build:webview",
+    "build:extension": "tsc -p ./",
+    "build:webview": "esbuild webview-src/main.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=media/webview.js",
+    "watch": "npm run watch:extension",
+    "watch:extension": "tsc -watch -p ./",
+    "watch:webview": "esbuild webview-src/main.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=media/webview.js --watch",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.4.5"
+  }
+}

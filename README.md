@@ -1,6 +1,6 @@
 # YinlinAssistant
 
-YinlinAssistant 是一个面向毕业设计《基于 Vibe Coding 的编程助手 Agent 研究与设计》的开源项目原型。它以 VS Code 插件为入口，以 Python Agent 后端为核心，围绕“理解代码、检索项目、规划修改、预览 diff、确认写回”这一条完整链路来设计。
+你好喵👋，本项目YinlinAssistant 是一个面向我的毕业设计《基于 Vibe Coding 的编程助手 Agent 研究与设计》的开源项目原型。它以 VS Code 插件为入口，以 Python Agent 后端为核心，围绕“理解代码、检索项目、规划修改、预览 diff、确认写回”这一条完整链路来设计。目前还在持续更新和开发中
 
 当前仓库已经整理为公开协作版本，适合继续做毕设开发、功能扩展和开源维护。
 
@@ -20,11 +20,18 @@ YinlinAssistant 是一个面向毕业设计《基于 Vibe Coding 的编程助手
 - 在插件侧先展示 diff 预览，再由用户确认是否应用
 - Webview 前端已迁移到 React，便于后续继续扩展 UI
 
+## 未来的大饼
+
+- 将LLM更改为经过LoRA微调后的自适应版本
+- 使用VRM和Unity技术，增加数字人并再搭载数字人Agent
+- 接入OCR和NLP的api，实现更智能化
+- 加入快速启动版本（本地exe）
+
 ## 技术栈
 
-- 插件壳层：TypeScript + VS Code Extension API
-- Agent 后端：Python + FastAPI
-- 本地模型：Ollama
+- 插件壳层：TypeScript + VS Code Extension API（其实就是VScode插件开发框架）
+- Agent 后端：Python（经由FastAPI）
+- 本地模型：Ollama（DeepSeek）
 - Webview 前端：React + esbuild
 - Python 运行环境：Conda `CodingAgent`
 
@@ -133,10 +140,10 @@ YinlinAssistant 是一个面向毕业设计《基于 Vibe Coding 的编程助手
 
 ## 本地运行
 
-1. 启动 Python 后端
+1. 启动 Python 后端（请确认你有conda环境且py==3.10）
 
 ```powershell
-& 'E:\ANACONDA\condabin\conda.bat' run -n CodingAgent python -m uvicorn backend.main:app --reload
+& conda run -n CodingAgent python -m uvicorn backend.main:app --reload
 ```
 
 2. 确认 Ollama 正在运行，并且目标模型已经安装
@@ -156,7 +163,7 @@ npm run build
 - `npm run build:extension` 负责编译 VS Code 插件端
 - `npm run build:webview` 负责编译 React Webview
 
-4. 在 VS Code 中按 `F5` 启动 `Extension Development Host`
+4. 在 VS Code 中按 `F5` 调试启动 `Extension Development Host`
 
 ## 开发约定
 
@@ -168,14 +175,4 @@ npm run build
 
 ## 适合演示的示例请求
 
-```text
-请分析当前文件的结构，并指出可维护性问题。
-```
-
-```text
-请先检索当前项目相关文件，再规划一组待确认的项目级修改方案，必要时可以同时包含新增文件、修改旧文件和更新文档。
-```
-
-```text
-请先检索当前项目中与功能说明相关的文件，并规划一组待确认的文档更新方案，优先考虑 README.md 和 docs 目录。
-```
+TODO……

@@ -1,179 +1,137 @@
-# Vibe Coding Agent
+# YinlinAssistant
 
-这是一个面向毕业设计《基于 Vibe Coding 的编程助手 Agent 研究与设计》的 VS Code 插件原型项目。
+YinlinAssistant 是一个面向毕业设计《基于 Vibe Coding 的编程助手 Agent 研究与设计》的开源项目原型。它以 VS Code 插件为入口，以 Python Agent 后端为核心，围绕“理解代码、检索项目、规划修改、预览 diff、确认写回”这一条完整链路来设计。
 
-当前项目采用清晰的前后端分层：
-- `src/`：VS Code 插件端，负责界面展示、收集编辑器上下文、显示 diff 预览、确认后执行文件写回
-- `backend/`：Python 后端，负责 Agent 工作流、工作区检索、提示词组织、结构化动作生成、调用 Ollama
-- `webview-src/`：React Webview 前端源码
-- `media/`：Webview 打包产物和样式资源
-- `docs/`：系统架构、前后端边界说明、论文提纲等文档
+当前仓库已经整理为公开协作版本，适合继续做毕设开发、功能扩展和开源维护。
 
-后续每次功能更新后，都应同步更新本 README，保证目录说明和文件职责始终可追踪。
+## 开源信息
 
-## 当前技术栈
+- 许可证：[LICENSE](./LICENSE)
+- 贡献指南：[CONTRIBUTING.md](./CONTRIBUTING.md)
+- 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- 安全策略：[SECURITY.md](./SECURITY.md)
 
-- VS Code 插件壳层：TypeScript
-- Agent 核心后端：Python
-- 本地模型运行时：Ollama
-- Python 环境：Conda `CodingAgent`
+## 当前能力
 
-## 项目目录说明
+- 在 VS Code 中读取当前活动文件和选中代码
+- 由 Python 后端组织 Agent 工作流并调用 Ollama
+- 检索当前项目相关文件，生成项目级修改建议
+- 支持三类结构化动作：新建文件、修改旧文件、更新文档
+- 在插件侧先展示 diff 预览，再由用户确认是否应用
+- Webview 前端已迁移到 React，便于后续继续扩展 UI
+
+## 技术栈
+
+- 插件壳层：TypeScript + VS Code Extension API
+- Agent 后端：Python + FastAPI
+- 本地模型：Ollama
+- Webview 前端：React + esbuild
+- Python 运行环境：Conda `CodingAgent`
+
+## 目录结构
 
 ```text
 .
-├─ backend/                  # Python 后端，真正的 Agent 逻辑在这里
-├─ docs/                     # 架构设计和论文相关文档
-├─ examples/                 # 演示和测试用示例代码
-├─ webview-src/              # React Webview 前端源码
-├─ media/                    # Webview 前端资源
-├─ src/                      # VS Code 插件端
-├─ .vscode/                  # 调试配置、任务配置、解释器配置
-├─ environment.yml           # Conda 环境定义
-├─ requirements.txt          # Python 依赖
-├─ package.json              # VS Code 插件清单与配置项
-├─ tsconfig.json             # TypeScript 编译配置
-└─ README.md                 # 项目总览与目录导航
+├─ .github/                    # GitHub 协作配置、Issue/PR 模板、CI 工作流
+├─ .vscode/                    # 本仓库的调试与任务配置
+├─ backend/                    # Python Agent 后端
+├─ docs/                       # 架构说明、边界说明、论文提纲
+├─ examples/                   # 演示与测试示例
+├─ media/                      # Webview 样式与打包产物目录
+├─ src/                        # VS Code 插件端源码
+├─ webview-src/                # React Webview 源码
+├─ .editorconfig               # 跨语言基础格式约定
+├─ .gitattributes              # Git 文本换行与属性配置
+├─ .gitignore                  # 构建产物与本地缓存忽略规则
+├─ CODE_OF_CONDUCT.md          # 社区行为准则
+├─ CONTRIBUTING.md             # 贡献流程与开发约定
+├─ LICENSE                     # 开源许可证
+├─ SECURITY.md                 # 安全问题披露说明
+├─ environment.yml             # Conda 环境定义
+├─ package.json                # 插件清单与前端构建脚本
+├─ requirements.txt            # Python 后端依赖
+└─ README.md                   # 仓库首页说明
 ```
 
-## 关键目录与文件功能
+## 关键目录与文件说明
 
-### 1. `backend/`：Python 后端
+### `.github/`
+
+- `.github/ISSUE_TEMPLATE/bug_report.yml`
+  - 缺陷反馈模板，帮助维护者稳定复现问题
+- `.github/ISSUE_TEMPLATE/feature_request.yml`
+  - 功能建议模板，约束需求描述格式
+- `.github/ISSUE_TEMPLATE/config.yml`
+  - Issue 创建入口配置与辅助链接
+- `.github/pull_request_template.md`
+  - Pull Request 提交模板
+- `.github/CODEOWNERS`
+  - 默认代码所有者配置
+- `.github/workflows/ci.yml`
+  - 基础持续集成流程，负责构建插件并检查 Python 后端可编译性
+
+### `backend/`
 
 - `backend/main.py`
-  - FastAPI 入口，向插件暴露 `/health` 和 `/generate`
+  - FastAPI 入口，暴露健康检查与 Agent 调用接口
 - `backend/service.py`
-  - 后端主服务
-  - 负责区分“普通问答”和“项目级变更规划”两种模式
-- `backend/agent_workflow.py`
-  - 轻量级 Agent 编排层
-  - 负责串联当前文件分析、工作区检索、动作校验
-- `backend/models.py`
-  - 后端请求/响应模型定义
-  - 包括结构化文件动作 `create_file`、`update_file`、`update_documentation`
-- `backend/ollama_client.py`
-  - 封装对本机 Ollama 服务的调用
+  - 后端主服务，负责普通问答、项目级动作规划和结构化结果整理
 - `backend/prompt_builder.py`
-  - 负责拼装提示词
-  - 区分普通问答提示词和“项目级变更方案”提示词
-- `backend/request_classifier.py`
-  - 判断用户请求是否属于“需要真正修改项目”的类型
+  - 提示词构造逻辑，区分普通分析、项目修改规划等不同模式
 - `backend/structured_response.py`
-  - 解析模型返回的结构化动作方案
-- `backend/icon.jpg`
-  - 当前插件面板使用的角色头像图片
-
-### 2. `backend/tools/`：后端工具层
-
+  - 解析大模型输出的结构化动作
+- `backend/agent_workflow.py`
+  - 轻量工作流编排层
 - `backend/tools/current_file_tool.py`
-  - 分析当前活动文件
-  - 负责统计文件结构、类、函数、风险点
+  - 当前文件分析工具
 - `backend/tools/workspace_search_tool.py`
-  - 在工作区中检索与当前需求相关的多个文件
-  - 为模型提供项目级上下文
+  - 工作区文件检索工具
 - `backend/tools/workspace_action_tool.py`
-  - 对模型生成的多文件动作做安全校验
-  - 补齐原始内容，用于前端生成 diff 和做冲突检测
+  - 多文件动作的校验与补全过程
+- `backend/ollama_client.py`
+  - Python 后端与 Ollama 的通信封装
 
-### 3. `src/`：VS Code 插件端
+### `src/`
 
 - `src/extension.ts`
-  - 插件入口
-  - 注册侧边栏视图、命令和编辑器事件
+  - 插件入口，负责激活扩展与注册命令
 - `src/panels/assistantPanel.ts`
-  - 插件主面板
-  - 负责把 Webview 挂载到 React 前端，并处理消息桥接
-
-### 4. `src/core/`：插件核心逻辑
-
+  - Webview 面板挂载与 VS Code 消息桥接
 - `src/core/agent.ts`
-  - 插件侧 Agent 门面
-  - 负责收集编辑器上下文、调用后端、在确认后执行动作
-- `src/core/types.ts`
-  - 插件端类型定义
-- `src/core/actionExecutor.ts`
-  - 真正执行文件创建、文件更新、文档更新的落盘逻辑
+  - 插件侧 Agent 门面，负责采集上下文并向后端发起请求
 - `src/core/diffPreview.ts`
-  - 生成简化版 unified diff 预览文本
+  - 将结构化动作转换为 diff 预览文本
+- `src/core/actionExecutor.ts`
+  - 在用户确认后真正创建或更新文件
 
-### 5. `src/core/providers/`：模型提供者适配层
-
-- `src/core/providers/localModelProvider.ts`
-  - 调用 Python 后端接口
-- `src/core/providers/mockProvider.ts`
-  - 调试 UI 时使用的假响应提供者
-
-### 6. `webview-src/`：React Webview 前端源码
+### `webview-src/`
 
 - `webview-src/main.tsx`
-  - React 入口文件
+  - React Webview 入口
 - `webview-src/App.tsx`
-  - Webview 顶层组件
-  - 负责把界面整理成“头部概览 -> 快捷任务 -> 待确认变更 -> 对话记录 -> 输入区”的单列工作流布局
+  - Webview 顶层页面结构
 - `webview-src/components/`
-  - React 组件目录
-  - 当前包含头部概览、状态栏、快捷任务、变更预览、聊天列表、输入框等组件
-- `webview-src/types.ts`
-  - Webview 前端的消息协议和类型定义
-- `webview-src/vscode.ts`
-  - 对 `acquireVsCodeApi()` 的轻量封装
+  - 面板头部、状态栏、快捷操作、变更预览、对话区、输入区等组件
 
-### 7. `media/`：Webview 打包产物与样式资源
-
-- `media/styles.css`
-  - React Webview 使用的全局样式表
-  - 当前设计目标是“信息层级清晰、侧边栏占用克制、适合后续扩展”
-- `media/webview.js`
-  - 由 `webview-src/` 通过 esbuild 打包生成的浏览器脚本
-- `media/icon.svg`
-  - 预留的图标资源
-
-### 8. `docs/`：项目文档
+### 其他重要目录
 
 - `docs/architecture.md`
-  - 系统架构说明
+  - 系统架构说明，适合论文设计章节引用
 - `docs/project-boundary.md`
   - 前后端职责边界说明
-- `docs/thesis-outline.md`
-  - 毕设论文提纲草案
-
-### 9. `examples/`：示例代码
-
 - `examples/sample_student_manager.py`
-  - 用于演示“分析文件”“解释代码”“生成修改方案”的示例 Python 文件
+  - 用于演示 Agent 分析、解释和改写能力的 Python 示例文件
 
-## 当前 Agent 能力
+## 交互流程
 
-- 读取当前活动文件
-- 分析 Python 文件中的结构和基础风险
-- 根据用户请求检索工作区中的多个相关文件
-- 生成结构化项目变更方案
-- 前端界面已改为 React 组件架构，便于后续继续扩展功能面板
-- 插件 UI 已整理为更简洁的单列工作流布局，更适合 VS Code 侧边栏使用
-- 支持三类动作一起编排
-  - 创建新文件
-  - 修改已有文件
-  - 更新说明文档
-- 先生成 diff 预览，再由用户确认是否真正应用
-- 在应用前检查目标文件是否已变化，避免覆盖新编辑
+1. 用户在插件侧边栏中输入需求或点击快捷操作。
+2. 插件端采集当前编辑器上下文、选中代码和工作区路径。
+3. Python 后端根据请求类型检索相关文件并组织 Agent 提示词。
+4. 后端调用 Ollama 生成结构化修改建议。
+5. 插件将建议渲染为 diff 预览，等待用户确认。
+6. 用户确认后，插件端执行文件创建、更新或文档修改。
 
-## 当前工作流
-
-1. 用户在插件中提出需求
-2. VS Code 插件收集当前编辑器上下文
-3. Python 后端分析当前文件，并检索工作区相关文件
-4. 后端调用 Ollama，生成结构化文件动作方案
-5. 插件将动作转换为 diff 预览显示在侧边栏
-6. 用户点击“确认应用”后，插件才真正写回文件
-
-## 当前 UI 设计原则
-
-- 以“工作流清晰”为第一目标，而不是做宣传页式布局
-- 把状态、快捷任务、待确认变更、对话记录分成明确区域
-- 减少大面积装饰性视觉元素，优先保证信息可扫描性
-- 保留 React 组件化结构，方便后续继续扩展多步骤 Agent 交互
-
-## 运行方式
+## 本地运行
 
 1. 启动 Python 后端
 
@@ -181,30 +139,34 @@
 & 'E:\ANACONDA\condabin\conda.bat' run -n CodingAgent python -m uvicorn backend.main:app --reload
 ```
 
-2. 确认 Ollama 已经运行，并且目标模型存在
+2. 确认 Ollama 正在运行，并且目标模型已经安装
 
 ```powershell
 ollama list
 ```
 
-3. 构建 VS Code 插件
+3. 安装前端依赖并构建项目
 
 ```powershell
+npm install
 npm run build
 ```
 
 说明：
-- `npm run build:extension` 负责编译 VS Code 插件端 TypeScript
-- `npm run build:webview` 负责编译 React Webview 前端
+- `npm run build:extension` 负责编译 VS Code 插件端
+- `npm run build:webview` 负责编译 React Webview
 
-4. 在 VS Code 中按 `F5` 启动 Extension Development Host
+4. 在 VS Code 中按 `F5` 启动 `Extension Development Host`
 
-## 快速演示建议
+## 开发约定
 
-你可以先打开：
-- `examples/sample_student_manager.py`
+- Python 是后端主语言，Agent 编排、工具调用和模型接入逻辑尽量放在 `backend/`
+- TypeScript 只承担插件壳层和 Webview 消息桥接等必要职责
+- Webview UI 使用 React 维护，不再继续扩展纯手写 DOM 方案
+- 每次调整目录结构或新增关键文件后，需要同步更新本 `README.md`
+- 提交信息建议遵循 Conventional Commits，例如 `feat:`、`fix:`、`docs:`、`chore:`
 
-然后在插件中尝试这些请求：
+## 适合演示的示例请求
 
 ```text
 请分析当前文件的结构，并指出可维护性问题。
@@ -217,25 +179,3 @@ npm run build
 ```text
 请先检索当前项目中与功能说明相关的文件，并规划一组待确认的文档更新方案，优先考虑 README.md 和 docs 目录。
 ```
-
-## 默认配置
-
-- Ollama base URL: `http://127.0.0.1:11434`
-- Ollama model: `deepseek-r1:7b`
-- Python backend endpoint: `http://127.0.0.1:8000/generate`
-- Conda env: `CodingAgent`
-
-## 仓库管理约定
-
-- `media/webview.js` 属于前端打包产物，不直接提交源码仓库
-- `__pycache__/`、`*.pyc` 等 Python 缓存文件不纳入版本控制
-- `.vscode/settings.json` 属于本机环境配置，不作为跨机器共享配置提交
-- `.vscode/launch.json`、`.vscode/tasks.json` 保留在仓库中，方便项目调试和演示
-
-## 开发原则
-
-- 与 VS Code 生命周期强相关的代码写在 `src/`
-- 与模型、工具、Agent 工作流相关的代码写在 `backend/`
-- 如果未来可能被其他前端复用，优先写在 Python 后端
-- 任何涉及项目结构变化的功能，都应同步更新本 README
-- 注释和结构尽量面向计算机初学者保持清晰

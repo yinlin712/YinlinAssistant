@@ -9,7 +9,16 @@ media/webview.js
 # Python cache files
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Local editor / OS files
 .DS_Store
+.idea/
 .vscode/settings.json
+.env
+.env.*

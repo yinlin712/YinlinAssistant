@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全问题披露说明
+    url: https://github.com/yinlin712/YinlinAssistant/blob/main/SECURITY.md
+    about: 涉及安全风险时，请先阅读安全策略，不要直接公开利用细节。
+  - name: 项目首页与开发说明
+    url: https://github.com/yinlin712/YinlinAssistant#readme
+    about: 如果你只是想了解项目结构、运行方式和目录职责，请先查看 README。

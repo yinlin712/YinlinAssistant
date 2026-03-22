@@ -4,7 +4,24 @@
   "description": "A VS Code AI agent prototype for assisted programming with a Python backend, Ollama integration, VRM avatar hooks, and LoRA-ready model serving.",
   "version": "0.2.0",
   "publisher": "graduation-project",
+  "author": "yinlin712",
   "license": "MIT",
+  "homepage": "https://github.com/yinlin712/YinlinAssistant#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yinlin712/YinlinAssistant.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yinlin712/YinlinAssistant/issues"
+  },
+  "keywords": [
+    "vscode-extension",
+    "ai-agent",
+    "programming-assistant",
+    "ollama",
+    "python-backend",
+    "react-webview"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },

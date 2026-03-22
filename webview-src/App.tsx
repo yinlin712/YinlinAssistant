@@ -14,10 +14,17 @@ import {
   WebviewIncomingMessage,
 } from "./types";
 
+// 文件说明：
+// 本文件定义 Webview 顶层页面，负责维护前端状态并处理来自插件端的消息。
+
+// 类型说明：
+// 约束顶层组件所需的外部资源参数。
 type AppProps = {
   avatarUri?: string;
 };
 
+// 组件说明：
+// 统一组织头部、状态栏、快捷任务、变更预览、对话区与输入区。
 export function App({ avatarUri }: AppProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState("待命");
@@ -26,6 +33,8 @@ export function App({ avatarUri }: AppProps) {
   const [emptyProposalText, setEmptyProposalText] = useState("当前还没有待确认的变更方案。");
   const [proposal, setProposal] = useState<PendingProposalPayload | null>(null);
 
+  // 方法说明：
+  // 监听插件端推送的消息，并同步前端展示状态。
   useEffect(() => {
     function handleMessage(event: MessageEvent<WebviewIncomingMessage>) {
       const message = event.data;
@@ -67,6 +76,8 @@ export function App({ avatarUri }: AppProps) {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  // 方法说明：
+  // 将用户输入统一封装为 Webview 消息并发送给插件端。
   function submitPrompt(prompt: string) {
     vscode.postMessage({
       type: "submitPrompt",

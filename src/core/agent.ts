@@ -4,14 +4,21 @@ import { LocalModelProvider } from "./providers/localModelProvider";
 import { MockModelProvider } from "./providers/mockProvider";
 import { AgentAction, AgentContext, AgentResponse, ModelProvider } from "./types";
 
+// 文件说明：
+// 本文件定义插件端的 Agent 门面。
+// 其职责是采集编辑器上下文、调用后端提供者，并在确认后执行文件动作。
+
 const DOCUMENT_EXCERPT_LIMIT = 4000;
 const FULL_DOCUMENT_LIMIT = 18000;
 
-// 这个类位于 VS Code 插件端。
-// 它负责收集上下文、把请求发给 Python 后端，并在用户确认后执行动作。
+
+// 类说明：
+// 对外屏蔽上下文构建、提供者选择和动作执行细节。
 export class CodingAgent {
   private readonly actionExecutor = new AgentActionExecutor();
 
+  // 方法说明：
+  // 执行一次用户请求，并返回响应内容、提供者名称和上下文快照。
   public async run(prompt: string): Promise<{ response: AgentResponse; provider: string; context: AgentContext }> {
     const context = this.buildContext();
     const provider = this.resolveProvider();
@@ -24,6 +31,8 @@ export class CodingAgent {
     };
   }
 
+  // 方法说明：
+  // 在用户确认后执行待应用动作。
   public async applyProposedActions(actions: AgentAction[]): Promise<AppliedActionsResult> {
     const context = this.buildContext();
     const appliedActions = await this.actionExecutor.execute(actions, context);
@@ -34,6 +43,8 @@ export class CodingAgent {
     };
   }
 
+  // 方法说明：
+  // 根据插件配置选择当前使用的模型提供者。
   private resolveProvider(): ModelProvider {
     const config = vscode.workspace.getConfiguration("vibeCodingAgent");
     const providerName = config.get<string>("modelProvider", "local");
@@ -45,6 +56,8 @@ export class CodingAgent {
     return new LocalModelProvider();
   }
 
+  // 方法说明：
+  // 从当前活动编辑器和插件配置中构造一次请求需要的上下文。
   private buildContext(): AgentContext {
     const config = vscode.workspace.getConfiguration("vibeCodingAgent");
     const editor = vscode.window.activeTextEditor;
@@ -73,6 +86,9 @@ export class CodingAgent {
   }
 }
 
+
+// 类型说明：
+// 保存插件端动作应用后的结果。
 export interface AppliedActionsResult {
   context: AgentContext;
   appliedActions: ReturnType<AgentActionExecutor["execute"]> extends Promise<infer T> ? T : never;

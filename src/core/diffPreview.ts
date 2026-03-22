@@ -1,11 +1,15 @@
 import * as path from "path";
 import { ActionPreviewItem, AgentAction } from "./types";
 
+// 文件说明：
+// 本文件负责将结构化动作转换为适合侧边栏展示的简化 diff 文本。
+
 const CONTEXT_LINES = 2;
 const MAX_DIFF_LINES = 160;
 
-// 生成一个适合在侧边栏中展示的“简化 unified diff”。
-// 这不是完整的 git diff 算法，但足够帮助用户先确认本次改动的大致范围。
+
+// 函数说明：
+// 将动作列表转换为预览列表。
 export function buildActionPreviewItems(
   actions: AgentAction[],
   workspaceRoot?: string
@@ -18,6 +22,9 @@ export function buildActionPreviewItems(
   }));
 }
 
+
+// 函数说明：
+// 为单个动作生成简化版 unified diff。
 function buildUnifiedDiff(action: AgentAction): string {
   const oldLines = splitLines(action.originalContent);
   const newLines = splitLines(action.updatedContent);
@@ -56,6 +63,9 @@ function buildUnifiedDiff(action: AgentAction): string {
   return trimDiffLines(diffLines);
 }
 
+
+// 函数说明：
+// 将文本内容拆分为逐行数组。
 function splitLines(content: string): string[] {
   if (!content) {
     return [];
@@ -64,6 +74,9 @@ function splitLines(content: string): string[] {
   return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
 }
 
+
+// 函数说明：
+// 计算新旧文本的公共前缀长度。
 function findCommonPrefix(left: string[], right: string[]): number {
   let index = 0;
   while (index < left.length && index < right.length && left[index] === right[index]) {
@@ -72,6 +85,9 @@ function findCommonPrefix(left: string[], right: string[]): number {
   return index;
 }
 
+
+// 函数说明：
+// 计算新旧文本的公共后缀长度。
 function findCommonSuffix(left: string[], right: string[], prefixLength: number): number {
   let index = 0;
 
@@ -86,6 +102,9 @@ function findCommonSuffix(left: string[], right: string[], prefixLength: number)
   return index;
 }
 
+
+// 函数说明：
+// 控制侧边栏中单个 diff 的最大显示行数。
 function trimDiffLines(lines: string[]): string {
   if (lines.length <= MAX_DIFF_LINES) {
     return lines.join("\n");
@@ -96,6 +115,9 @@ function trimDiffLines(lines: string[]): string {
   return kept.join("\n");
 }
 
+
+// 函数说明：
+// 将绝对路径转换为相对工作区路径，便于界面展示。
 function toDisplayPath(targetFile: string, workspaceRoot?: string): string {
   if (!workspaceRoot) {
     return targetFile;
@@ -109,6 +131,9 @@ function toDisplayPath(targetFile: string, workspaceRoot?: string): string {
   return targetFile;
 }
 
+
+// 函数说明：
+// 为缺省动作摘要提供简要文本。
 function defaultSummary(kind: AgentAction["kind"]): string {
   if (kind === "create_file") {
     return "新增文件";

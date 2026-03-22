@@ -1,3 +1,8 @@
+// 文件说明：
+// 本文件集中定义侧边栏快捷任务，并提供当前文件与项目级操作入口。
+
+// 常量说明：
+// 定义围绕当前文件的快捷分析任务。
 const PRIMARY_ACTIONS = [
   {
     label: "分析当前文件",
@@ -13,6 +18,8 @@ const PRIMARY_ACTIONS = [
   },
 ];
 
+// 常量说明：
+// 定义会触发项目检索与结构化改动规划的快捷任务。
 const PROJECT_ACTIONS = [
   {
     label: "规划项目修改",
@@ -28,10 +35,14 @@ const PROJECT_ACTIONS = [
   },
 ];
 
+// 类型说明：
+// 约束快捷任务组件对外暴露的提交能力。
 type QuickActionsProps = {
   onSubmitPrompt: (prompt: string) => void;
 };
 
+// 组件说明：
+// 以按钮形式展示常用任务，并将预置提示词发送给上层。
 export function QuickActions({ onSubmitPrompt }: QuickActionsProps) {
   return (
     <section className="action-panel">

@@ -1,5 +1,10 @@
 import { PendingProposalPayload } from "../types";
 
+// 文件说明：
+// 本文件负责展示待确认的文件变更方案与 diff 预览。
+
+// 类型说明：
+// 约束变更预览组件需要的状态与事件回调。
 type ProposalPanelProps = {
   proposal: PendingProposalPayload | null;
   emptyText: string;
@@ -7,6 +12,8 @@ type ProposalPanelProps = {
   onDiscard: () => void;
 };
 
+// 组件说明：
+// 根据是否存在待确认方案，渲染 diff 列表或空状态占位。
 export function ProposalPanel({ proposal, emptyText, onApply, onDiscard }: ProposalPanelProps) {
   return (
     <section className={`proposal-panel${proposal ? "" : " is-empty"}`}>

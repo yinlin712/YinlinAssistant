@@ -1,6 +1,13 @@
 import * as vscode from "vscode";
 import { AssistantPanelProvider } from "./panels/assistantPanel";
 
+// 文件说明：
+// 本文件是 VS Code 插件端入口。
+// 其职责包括扩展激活、命令注册、侧边栏挂载以及编辑器上下文刷新。
+
+
+// 函数说明：
+// 当扩展被 VS Code 激活时，完成命令和侧边栏注册。
 export function activate(context: vscode.ExtensionContext): void {
   console.log("[Vibe Coding Agent] Extension activated.");
 
@@ -43,6 +50,9 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 }
 
+
+// 函数说明：
+// 当扩展被停用时输出日志，便于调试生命周期。
 export function deactivate(): void {
   console.log("[Vibe Coding Agent] Extension deactivated.");
 }

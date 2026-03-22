@@ -1,12 +1,21 @@
 import { FormEvent, useState } from "react";
 
+// 文件说明：
+// 本文件负责渲染输入区，并在提交后将用户需求发送给顶层页面。
+
+// 类型说明：
+// 约束输入区组件对外暴露的提交能力。
 type ComposerProps = {
   onSubmitPrompt: (prompt: string) => void;
 };
 
+// 组件说明：
+// 管理当前输入内容并在表单提交时触发消息发送。
 export function Composer({ onSubmitPrompt }: ComposerProps) {
   const [value, setValue] = useState("");
 
+  // 方法说明：
+  // 拦截表单默认提交行为，并将非空输入发送给上层。
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextValue = value.trim();

@@ -5,6 +5,9 @@ from pathlib import Path
 from backend.models import AgentContextModel
 from backend.request_classifier import mentions_documentation
 
+# 文件说明：
+# 本文件负责在工作区内检索与当前请求更相关的文件。
+# 检索结果既会用于提示词，也会用于后续动作校验和兜底规划。
 
 TEXT_FILE_SUFFIXES = {
     ".py",
@@ -40,6 +43,8 @@ IGNORED_DIRECTORIES = {
 }
 
 
+# 数据说明：
+# 表示单个候选文件的快照信息。
 @dataclass
 class WorkspaceFileSnapshot:
     absolute_path: str
@@ -49,6 +54,8 @@ class WorkspaceFileSnapshot:
     full_content: str
     excerpt: str
 
+    # 方法说明：
+    # 将候选文件快照转换为提示词片段。
     def to_prompt_text(self) -> str:
         content_for_prompt = self.full_content if len(self.full_content) <= 6000 else self.excerpt
         content_mode = "full" if content_for_prompt == self.full_content else "excerpt"
@@ -60,12 +67,16 @@ class WorkspaceFileSnapshot:
         )
 
 
+# 数据说明：
+# 表示一次工作区检索的汇总结果。
 @dataclass
 class WorkspaceSearchResult:
     workspace_root: str = ""
     candidate_files: list[WorkspaceFileSnapshot] = field(default_factory=list)
     overview_lines: list[str] = field(default_factory=list)
 
+    # 方法说明：
+    # 将检索结果整理成提示词文本。
     def to_prompt_text(self) -> str:
         if not self.workspace_root:
             return "(workspace unavailable)"
@@ -85,9 +96,11 @@ class WorkspaceSearchResult:
         return "\n".join(lines)
 
 
+# 类说明：
+# 根据请求内容、活动文件和文件路径特征挑选工作区候选文件。
 class WorkspaceSearchTool:
-    """在工作区中检索与当前需求最相关的文件。"""
-
+    # 方法说明：
+    # 执行一次工作区检索并返回排序后的候选结果。
     def search(self, context: AgentContextModel, prompt: str) -> WorkspaceSearchResult:
         workspace_root = (context.workspaceRoot or "").strip()
         if not workspace_root:
@@ -135,6 +148,8 @@ class WorkspaceSearchTool:
             overview_lines=overview_lines,
         )
 
+    # 方法说明：
+    # 收集参与评分的候选文本文件。
     def _collect_candidate_paths(self, root: Path) -> list[Path]:
         paths: list[Path] = []
 
@@ -161,6 +176,8 @@ class WorkspaceSearchTool:
 
         return paths
 
+    # 方法说明：
+    # 在评分后选出真正送入提示词的少量候选文件。
     def _pick_top_paths(
         self,
         scored_entries: list[tuple[int, str, Path]],
@@ -201,6 +218,8 @@ class WorkspaceSearchTool:
 
         return selected
 
+    # 方法说明：
+    # 对单个文件做启发式评分。
     def _score_path(
         self,
         path: Path,
@@ -263,6 +282,8 @@ class WorkspaceSearchTool:
 
         return score, "；".join(reasons[:3])
 
+    # 方法说明：
+    # 读取候选文件文本内容。
     def _read_text(self, path: Path) -> str:
         try:
             return path.read_text(encoding="utf-8")
@@ -274,12 +295,16 @@ class WorkspaceSearchTool:
         except OSError:
             return ""
 
+    # 方法说明：
+    # 生成候选文件摘要片段。
     def _build_excerpt(self, content: str, max_chars: int) -> str:
         cleaned = content.strip()
         if len(cleaned) <= max_chars:
             return cleaned
         return cleaned[:max_chars] + "\n...[truncated by workspace search]"
 
+    # 方法说明：
+    # 将绝对路径转换为相对工作区的显示路径。
     def _to_relative(self, root: Path, path: Path) -> str:
         try:
             return str(path.resolve().relative_to(root.resolve()))

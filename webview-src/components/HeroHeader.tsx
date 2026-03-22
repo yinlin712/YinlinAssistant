@@ -1,7 +1,14 @@
+// 文件说明：
+// 本文件负责渲染侧边栏顶部概览区域，用于展示助手身份与核心能力标签。
+
+// 类型说明：
+// 约束头部组件所需的头像资源参数。
 type HeroHeaderProps = {
   avatarUri?: string;
 };
 
+// 组件说明：
+// 展示助手标题、头像和能力标签。
 export function HeroHeader({ avatarUri }: HeroHeaderProps) {
   return (
     <section className="hero">

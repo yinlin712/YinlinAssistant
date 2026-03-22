@@ -1,5 +1,13 @@
+# 文件说明：
+# 本文件负责根据用户输入的大意判断请求类型。
+# 当前主要区分两类：
+# 1. 普通问答或分析
+# 2. 涉及真实文件修改的项目级请求
+
+
+# 函数说明：
+# 判断当前请求是否应进入“项目级修改规划”模式。
 def should_propose_workspace_changes(prompt: str) -> bool:
-    """判断用户是否希望助手真正改动项目文件。"""
     normalized = prompt.strip().lower()
     if not normalized:
         return False
@@ -11,6 +19,7 @@ def should_propose_workspace_changes(prompt: str) -> bool:
         "直接修改",
         "应用修改",
         "生成变更",
+        "待确认的项目级修改方案",
         "新增文件",
         "创建文件",
         "创建一个新文件",
@@ -76,8 +85,9 @@ def should_propose_workspace_changes(prompt: str) -> bool:
     return has_action_verb and has_target
 
 
+# 函数说明：
+# 判断当前请求是否明确提到了文档更新意图。
 def mentions_documentation(prompt: str) -> bool:
-    """判断用户请求里是否明显包含文档更新意图。"""
     normalized = prompt.strip().lower()
     documentation_keywords = [
         "文档",

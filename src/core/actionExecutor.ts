@@ -2,9 +2,16 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { AgentAction, AgentContext, AppliedAgentAction } from "./types";
 
-// 这个执行器位于 VS Code 插件端。
-// 它专门负责把 Python 后端返回的“待确认动作”真正落盘。
+// 文件说明：
+// 本文件负责在插件端真正执行文件动作。
+// 后端只负责规划，实际写入工作区文件必须由插件端完成。
+
+
+// 类说明：
+// 统一处理创建文件、更新代码文件和更新文档文件三类动作。
 export class AgentActionExecutor {
+  // 方法说明：
+  // 顺序执行动作列表，并为每个动作返回执行结果。
   public async execute(actions: AgentAction[], context: AgentContext): Promise<AppliedAgentAction[]> {
     const results: AppliedAgentAction[] = [];
 
@@ -25,6 +32,8 @@ export class AgentActionExecutor {
     return results;
   }
 
+  // 方法说明：
+  // 执行“新建文件”动作。
   private async createFile(action: AgentAction, context: AgentContext): Promise<AppliedAgentAction> {
     try {
       const targetPath = this.ensureAllowedPath(action.targetFile, context);
@@ -45,6 +54,8 @@ export class AgentActionExecutor {
     }
   }
 
+  // 方法说明：
+  // 执行“更新已有代码文件”动作。
   private async updateExistingFile(action: AgentAction, context: AgentContext): Promise<AppliedAgentAction> {
     try {
       const targetPath = this.ensureAllowedPath(action.targetFile, context);
@@ -77,6 +88,8 @@ export class AgentActionExecutor {
     }
   }
 
+  // 方法说明：
+  // 执行“更新文档文件”动作。
   private async updateDocumentation(action: AgentAction, context: AgentContext): Promise<AppliedAgentAction> {
     try {
       const targetPath = this.ensureAllowedPath(action.targetFile, context);
@@ -111,6 +124,8 @@ export class AgentActionExecutor {
     }
   }
 
+  // 方法说明：
+  // 校验目标路径是否位于当前工作区内。
   private ensureAllowedPath(targetFile: string, context: AgentContext): string | undefined {
     if (!targetFile.trim() || !context.workspaceRoot) {
       return undefined;
@@ -127,6 +142,8 @@ export class AgentActionExecutor {
     return targetPath;
   }
 
+  // 方法说明：
+  // 将目标文件整篇替换为新内容。
   private async replaceWholeDocument(targetPath: string, nextText: string): Promise<void> {
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
     const currentText = document.getText();
@@ -144,6 +161,8 @@ export class AgentActionExecutor {
     await document.save();
   }
 
+  // 方法说明：
+  // 优先从已打开文档中读取内容，否则回退到磁盘读取。
   private async readCurrentText(targetPath: string): Promise<string | null> {
     const openDocument = vscode.workspace.textDocuments.find((document) => document.fileName === targetPath);
     if (openDocument) {
@@ -158,12 +177,16 @@ export class AgentActionExecutor {
     }
   }
 
+  // 方法说明：
+  // 将文本写入磁盘文件。
   private async writeTextToDisk(targetPath: string, content: string): Promise<void> {
     const normalized = this.normalizeText(content, "", vscode.EndOfLine.CRLF);
     const bytes = Buffer.from(normalized, "utf8");
     await vscode.workspace.fs.writeFile(vscode.Uri.file(targetPath), bytes);
   }
 
+  // 方法说明：
+  // 按目标文件换行风格规范化文本内容。
   private normalizeText(
     updatedContent: string,
     currentContent: string,
@@ -181,14 +204,20 @@ export class AgentActionExecutor {
     return result;
   }
 
+  // 方法说明：
+  // 判断目标文件是否仍与预览时的原始内容一致。
   private matchesOriginalContent(currentText: string, originalContent: string): boolean {
     return this.canonicalize(currentText) === this.canonicalize(originalContent);
   }
 
+  // 方法说明：
+  // 统一文本比较时使用的规范化规则。
   private canonicalize(content: string): string {
     return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   }
 
+  // 方法说明：
+  // 构造单个动作的执行结果对象。
   private buildResult(
     action: AgentAction,
     status: AppliedAgentAction["status"],
@@ -202,6 +231,8 @@ export class AgentActionExecutor {
     };
   }
 
+  // 方法说明：
+  // 将未知异常统一转换为字符串消息。
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }

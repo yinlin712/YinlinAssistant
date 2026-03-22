@@ -4,11 +4,15 @@ from pathlib import Path
 
 from backend.models import AgentContextModel
 
+# 文件说明：
+# 本文件负责对“当前活动文件”做轻量分析。
+# 输出结果会被拼接到提示词中，用于帮助模型理解当前文件结构和潜在风险。
 
+
+# 数据说明：
+# 保存当前文件分析结果。
 @dataclass
 class CurrentFileReport:
-    """保存“当前文件分析工具”的输出结果。"""
-
     file_path: str = "(none)"
     language_id: str = "(unknown)"
     source_from: str = "unknown"
@@ -18,6 +22,8 @@ class CurrentFileReport:
     risk_points: list[str] = field(default_factory=list)
     excerpt: str = ""
 
+    # 方法说明：
+    # 将分析结果格式化为适合放入提示词的文本。
     def to_prompt_text(self) -> str:
         lines = [
             f"- File path: {self.file_path}",
@@ -46,9 +52,11 @@ class CurrentFileReport:
         return "\n".join(lines)
 
 
+# 类说明：
+# 执行当前活动文件的读取与分析。
 class CurrentFileTool:
-    """读取和分析当前活动文件。"""
-
+    # 方法说明：
+    # 对当前活动文件生成结构观察和风险提示。
     def inspect(self, context: AgentContextModel) -> CurrentFileReport:
         report = CurrentFileReport(
             file_path=context.activeFile or "(none)",
@@ -72,6 +80,8 @@ class CurrentFileTool:
 
         return report
 
+    # 方法说明：
+    # 优先从完整文档、文档摘要、磁盘文件三种来源中选择分析文本。
     def _resolve_source_text(self, context: AgentContextModel) -> tuple[str, str]:
         if context.fullDocumentText:
             return context.fullDocumentText, "full editor document"
@@ -85,6 +95,8 @@ class CurrentFileTool:
 
         return "", "unknown"
 
+    # 方法说明：
+    # 当编辑器上下文不足时，尝试直接从磁盘读取活动文件。
     def _read_active_file(self, file_path: str | None) -> str:
         if not file_path:
             return ""
@@ -103,6 +115,8 @@ class CurrentFileTool:
         except OSError:
             return ""
 
+    # 方法说明：
+    # 判断当前文件是否应按 Python 文件规则处理。
     def _is_python_file(self, context: AgentContextModel) -> bool:
         if context.languageId == "python":
             return True
@@ -110,12 +124,16 @@ class CurrentFileTool:
             return True
         return False
 
+    # 方法说明：
+    # 生成适合提示词使用的文件片段。
     def _build_excerpt(self, source_text: str, max_chars: int = 1200) -> str:
         cleaned = source_text.strip()
         if len(cleaned) <= max_chars:
             return cleaned
         return cleaned[:max_chars] + "\n...[truncated by tool]"
 
+    # 方法说明：
+    # 对非 Python 文件做基础文本级分析。
     def _analyze_generic_source(self, source_text: str, report: CurrentFileReport) -> None:
         report.structure_points.append("当前文件不是 Python 文件，因此只做基础文本级分析。")
 
@@ -125,6 +143,8 @@ class CurrentFileTool:
         if len(source_text.splitlines()) > 220:
             report.risk_points.append("文件行数较多，后续可以考虑拆分模块。")
 
+    # 方法说明：
+    # 对 Python 文件做 AST 级结构分析。
     def _analyze_python_source(self, source_text: str, report: CurrentFileReport) -> None:
         try:
             tree = ast.parse(source_text)
@@ -184,6 +204,8 @@ class CurrentFileTool:
                 f"这些函数包含较多 print，后续可考虑统一日志或输出层：{', '.join(print_heavy_functions[:6])}"
             )
 
+    # 方法说明：
+    # 从函数长度、异常处理和输出调用三个角度检查单个函数。
     def _check_function_quality(
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,

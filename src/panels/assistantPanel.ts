@@ -4,6 +4,11 @@ import { CodingAgent } from "../core/agent";
 import { buildActionPreviewItems } from "../core/diffPreview";
 import { ActionPreviewItem, AgentAction, AppliedAgentAction, ChatMessage } from "../core/types";
 
+// 文件说明：
+// 本文件负责在 VS Code 侧边栏中挂载 Webview，并完成插件端与前端界面的消息桥接。
+
+// 常量说明：
+// 集中维护侧边栏界面使用的静态文案，避免分散在业务逻辑中。
 const PANEL_TEXT = {
   greeting: "你好，我是 Vibe Coding Agent。现在我可以先检索项目相关文件，再生成待确认的多文件修改预览。",
   idle: "待命",
@@ -18,12 +23,16 @@ const PANEL_TEXT = {
   failedPrefix: "文件修改失败",
 };
 
+// 类型说明：
+// 保存当前待确认的变更方案及其 diff 预览结果。
 interface PendingProposal {
   actions: AgentAction[];
   summary: string;
   previews: ActionPreviewItem[];
 }
 
+// 类说明：
+// 统一管理 Webview 生命周期、消息分发和待确认方案状态。
 export class AssistantPanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "vibeCodingAgent.sidebar";
 
@@ -40,6 +49,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
+  // 方法说明：
+  // 在 Webview 首次解析时完成资源注入、消息监听与初始状态同步。
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
     webviewView.webview.options = {
@@ -69,14 +80,20 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     this.postHydrate();
   }
 
+  // 方法说明：
+  // 主动显示已经创建好的侧边栏视图。
   public reveal(): void {
     this.view?.show?.(true);
   }
 
+  // 方法说明：
+  // 当编辑器上下文变化时刷新顶部状态栏。
   public refreshContext(): void {
     this.postStatus(PANEL_TEXT.idle);
   }
 
+  // 方法说明：
+  // 接收用户输入并调用插件侧 Agent，随后将结果推送给 Webview。
   private async handleSubmitPrompt(rawPrompt: string): Promise<void> {
     const prompt = rawPrompt.trim();
     if (!prompt) {
@@ -120,6 +137,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     this.postStatus(this.moodToStatus(result.response.mood), result.provider, result.context.activeFile);
   }
 
+  // 方法说明：
+  // 在用户确认后执行待确认文件动作，并回写执行结果。
   private async applyPendingActions(): Promise<void> {
     if (!this.pendingProposal) {
       return;
@@ -144,6 +163,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     this.postStatus(PANEL_TEXT.responded, undefined, result.context.activeFile);
   }
 
+  // 方法说明：
+  // 向前端发送初始消息、状态信息和历史记录。
   private postHydrate(): void {
     const provider = vscode.workspace
       .getConfiguration("vibeCodingAgent")
@@ -167,6 +188,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  // 方法说明：
+  // 清空当前待确认方案，并按需通知前端重置预览区域。
   private clearPendingProposal(notifyWebview: boolean = true): void {
     this.pendingProposal = undefined;
     if (notifyWebview) {
@@ -177,6 +200,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  // 方法说明：
+  // 更新前端顶部状态栏，展示当前状态、模型提供者和活动文件。
   private postStatus(status: string, provider?: string, activeFile?: string): void {
     const resolvedProvider = provider ?? vscode.workspace
       .getConfiguration("vibeCodingAgent")
@@ -190,10 +215,14 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  // 方法说明：
+  // 统一向 Webview 发送结构化消息。
   private postMessage(type: string, payload: unknown): void {
     this.view?.webview.postMessage({ type, payload });
   }
 
+  // 方法说明：
+  // 生成 Webview 页面所需的 HTML 外壳，并注入脚本、样式和头像资源。
   private getHtml(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "webview.js"));
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "styles.css"));
@@ -214,6 +243,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
 </html>`;
   }
 
+  // 方法说明：
+  // 将后端返回的工作状态映射为界面展示文案。
   private moodToStatus(mood: "idle" | "thinking" | "helpful"): string {
     if (mood === "thinking") {
       return PANEL_TEXT.thinking;
@@ -226,6 +257,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     return PANEL_TEXT.idle;
   }
 
+  // 方法说明：
+  // 将文件动作执行结果格式化为对话区可展示的系统消息。
   private describeAppliedAction(action: AppliedAgentAction): string {
     const shortPath = this.toShortPath(action.targetFile);
 
@@ -240,6 +273,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     return `${PANEL_TEXT.failedPrefix}\n文件：${shortPath}\n原因：${action.summary}`;
   }
 
+  // 方法说明：
+  // 在存在工作区根目录时，将绝对路径转换为相对路径以便阅读。
   private toShortPath(filePath: string): string {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {

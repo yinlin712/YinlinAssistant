@@ -6,18 +6,24 @@ from backend.models import AgentContextModel, FileActionModel
 from backend.structured_response import ParsedAction
 from backend.tools.workspace_search_tool import WorkspaceSearchResult
 
+# 文件说明：
+# 本文件负责将模型动作转换为可执行动作。
+# 其核心目标是保证路径安全、内容完整，以及在必要时补齐原始文件内容。
 
+
+# 数据说明：
+# 保存动作预处理后的结果。
 @dataclass
 class WorkspaceActionPreparationResult:
-    """保存动作校验后的结果。"""
-
     actions: list[FileActionModel] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
 
+# 类说明：
+# 负责校验结构化动作并补齐执行所需的上下文。
 class WorkspaceActionTool:
-    """对多文件动作做安全校验，并补齐 originalContent。"""
-
+    # 方法说明：
+    # 对解析后的动作集合做统一校验与补全。
     def prepare_actions(
         self,
         context: AgentContextModel,
@@ -66,6 +72,8 @@ class WorkspaceActionTool:
 
         return WorkspaceActionPreparationResult(actions=prepared_actions, notes=notes)
 
+    # 方法说明：
+    # 将动作中的目标路径解析为工作区内的绝对路径。
     def _resolve_target_path(self, root: Path, target_file: str) -> Path | None:
         if not target_file.strip():
             return None
@@ -82,6 +90,8 @@ class WorkspaceActionTool:
 
         return resolved
 
+    # 方法说明：
+    # 为动作读取原始文件内容，供 diff 预览和冲突检测使用。
     def _read_original_content(
         self,
         context: AgentContextModel,
@@ -117,6 +127,8 @@ class WorkspaceActionTool:
         except OSError:
             return ""
 
+    # 方法说明：
+    # 针对不同动作类型执行内容和路径校验。
     def _validate_action(self, parsed_action: ParsedAction, target_path: Path, original_content: str) -> str | None:
         updated_content = parsed_action.updated_content.strip()
         if not updated_content:
@@ -145,15 +157,21 @@ class WorkspaceActionTool:
         if parsed_action.kind == "update_documentation":
             if not self._is_documentation_file(target_path):
                 return "目标路径不像文档文件，文档动作应优先指向 README.md 或 docs/*.md。"
+            if self._looks_like_source_code(updated_content):
+                return "文档动作返回的内容更像源代码，为了安全起见，这次不会直接覆盖文档。"
             if self._canonicalize(updated_content) == self._canonicalize(original_content):
                 return "文档更新内容与原文件一致，因此无需修改。"
             return None
 
         return "未知动作类型。"
 
+    # 方法说明：
+    # 判断目标路径是否为 Python 文件。
     def _is_python_file(self, target_path: Path) -> bool:
         return target_path.suffix.lower() == ".py"
 
+    # 方法说明：
+    # 判断目标路径是否属于文档文件。
     def _is_documentation_file(self, target_path: Path) -> bool:
         normalized = str(target_path).replace("\\", "/").lower()
         return (
@@ -165,6 +183,8 @@ class WorkspaceActionTool:
             or normalized.endswith("readme.md")
         )
 
+    # 方法说明：
+    # 使用 AST 校验 Python 内容是否存在明显语法错误。
     def _validate_python_syntax(self, content: str) -> str | None:
         try:
             ast.parse(content)
@@ -172,9 +192,36 @@ class WorkspaceActionTool:
             return f"模型生成的 Python 代码存在语法错误，大约在第 {exc.lineno} 行。"
         return None
 
+    # 方法说明：
+    # 粗略判断一个“文档动作”是否错误地返回了源码。
+    def _looks_like_source_code(self, content: str) -> bool:
+        normalized = content.lstrip()
+        source_markers = [
+            "import ",
+            "from ",
+            "class ",
+            "def ",
+            "function ",
+            "const ",
+            "let ",
+            "interface ",
+            "public class ",
+            "#include ",
+        ]
+
+        if any(normalized.startswith(marker) for marker in source_markers):
+            return True
+
+        lowered = normalized.lower()
+        return "```python" in lowered or "```ts" in lowered or "```javascript" in lowered
+
+    # 方法说明：
+    # 统一换行和首尾空白，便于比较文件是否真正发生变化。
     def _canonicalize(self, content: str) -> str:
         return content.replace("\r\n", "\n").replace("\r", "\n").strip()
 
+    # 方法说明：
+    # 当模型没有提供摘要时，生成默认摘要。
     def _default_summary(self, kind: str, target_path: Path) -> str:
         if kind == "create_file":
             return f"新增文件 {target_path.name}"

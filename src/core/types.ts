@@ -1,3 +1,7 @@
+// 文件说明：
+// 本文件定义插件端通用类型。
+// 这些类型会在面板、模型提供者、动作执行器等多个模块之间共享。
+
 export type ChatRole = "user" | "agent" | "system";
 
 export interface ChatMessage {

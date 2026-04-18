@@ -1,30 +1,69 @@
+import { useEffect, useRef } from "react";
 import { ChatMessage } from "../types";
+import { MarkdownContent } from "./MarkdownContent";
 
-// 文件说明：
-// 本文件负责渲染助手对话区，展示用户消息、模型回复与系统执行结果。
-
-// 类型说明：
-// 约束对话区组件所需的输入参数。
 type ChatListProps = {
   messages: ChatMessage[];
+  streamingMessage?: ChatMessage | null;
 };
 
-// 组件说明：
-// 按时间顺序渲染当前会话中的全部消息。
-export function ChatList({ messages }: ChatListProps) {
+/**
+ * 渲染对话区内容，并在新消息到来时自动滚动到底部。
+ */
+export function ChatList({ messages, streamingMessage = null }: ChatListProps) {
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, streamingMessage]);
+
   return (
     <section className="chat-panel">
-      <div className="section-head">
-        <h2>对话记录</h2>
-        <p>这里会展示分析结果、修改说明和应用反馈。</p>
-      </div>
       <div className="chat">
-        {messages.map((message, index) => (
-          <div className={`message ${message.role}`} key={`${message.role}-${index}`}>
-            {message.content}
+        {messages.map((message, index) => {
+          const previousRole = index > 0 ? messages[index - 1].role : null;
+          const isContinuation = previousRole === message.role;
+
+          return (
+            <div
+              className={`message ${message.role}${isContinuation ? " is-continuation" : ""}`}
+              key={`${message.role}-${index}`}
+            >
+              {!isContinuation ? (
+                <div className="message-role">{buildRoleLabel(message.role)}</div>
+              ) : null}
+              <MarkdownContent content={message.content} />
+            </div>
+          );
+        })}
+        {streamingMessage ? (
+          <div
+            className={`message ${streamingMessage.role} streaming${messages[messages.length - 1]?.role === streamingMessage.role ? " is-continuation" : ""}`}
+            key="streaming-agent-message"
+          >
+            {messages[messages.length - 1]?.role !== streamingMessage.role ? (
+              <div className="message-role">{buildRoleLabel(streamingMessage.role)}</div>
+            ) : null}
+            <MarkdownContent content={streamingMessage.content} />
           </div>
-        ))}
+        ) : null}
+        <div ref={bottomRef} />
       </div>
     </section>
   );
+}
+
+/**
+ * 将角色标识映射为界面标签。
+ */
+function buildRoleLabel(role: ChatMessage["role"]): string {
+  if (role === "user") {
+    return "你";
+  }
+
+  if (role === "system") {
+    return "系统";
+  }
+
+  return "Code Agent";
 }

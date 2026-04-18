@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { EditorDiffPreviewService } from "./core/editorDiffPreview";
 import { AssistantPanelProvider } from "./panels/assistantPanel";
 
 // 文件说明：
@@ -9,19 +10,57 @@ import { AssistantPanelProvider } from "./panels/assistantPanel";
 // 函数说明：
 // 当扩展被 VS Code 激活时，完成命令和侧边栏注册。
 export function activate(context: vscode.ExtensionContext): void {
-  console.log("[Vibe Coding Agent] Extension activated.");
+  console.log("[Code Agent] Extension activated.");
 
-  const panelProvider = new AssistantPanelProvider(context.extensionUri);
+  const diffPreviewService = new EditorDiffPreviewService();
+  const panelProvider = new AssistantPanelProvider(context.extensionUri, diffPreviewService);
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(AssistantPanelProvider.viewType, panelProvider)
+    diffPreviewService,
+    vscode.workspace.registerTextDocumentContentProvider(
+      EditorDiffPreviewService.scheme,
+      diffPreviewService,
+    ),
+    vscode.window.registerWebviewViewProvider(
+      AssistantPanelProvider.viewType,
+      panelProvider,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true,
+        },
+      },
+    )
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("vibeCodingAgent.start", async () => {
-      console.log("[Vibe Coding Agent] Opening assistant panel.");
+      console.log("[Code Agent] Opening assistant panel.");
       await vscode.commands.executeCommand("workbench.view.extension.vibeCodingAgent");
       panelProvider.reveal();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("vibeCodingAgent.editCurrentFile", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        void vscode.window.showWarningMessage("当前没有活动文件，无法直接修改。");
+        return;
+      }
+
+      const userInstruction = await vscode.window.showInputBox({
+        prompt: "描述希望如何修改当前文件",
+        placeHolder: "例如：请把当前函数拆分成更清晰的私有方法，并补上必要的中文注释。",
+        ignoreFocusOut: true,
+      });
+
+      if (!userInstruction?.trim()) {
+        return;
+      }
+
+      await vscode.commands.executeCommand("workbench.view.extension.vibeCodingAgent");
+      panelProvider.reveal();
+      await panelProvider.submitPrompt(`请直接修改当前文件：${userInstruction.trim()}`);
     })
   );
 
@@ -40,11 +79,11 @@ export function activate(context: vscode.ExtensionContext): void {
   if (context.extensionMode === vscode.ExtensionMode.Development) {
     setTimeout(async () => {
       try {
-        console.log("[Vibe Coding Agent] Auto-opening sidebar in development mode.");
+        console.log("[Code Agent] Auto-opening sidebar in development mode.");
         await vscode.commands.executeCommand("workbench.view.extension.vibeCodingAgent");
         panelProvider.reveal();
       } catch (error) {
-        console.error("[Vibe Coding Agent] Failed to auto-open sidebar.", error);
+        console.error("[Code Agent] Failed to auto-open sidebar.", error);
       }
     }, 1200);
   }
@@ -54,5 +93,5 @@ export function activate(context: vscode.ExtensionContext): void {
 // 函数说明：
 // 当扩展被停用时输出日志，便于调试生命周期。
 export function deactivate(): void {
-  console.log("[Vibe Coding Agent] Extension deactivated.");
+  console.log("[Code Agent] Extension deactivated.");
 }

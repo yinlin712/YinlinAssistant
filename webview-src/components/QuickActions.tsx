@@ -5,6 +5,10 @@
 // 定义围绕当前文件的快捷分析任务。
 const PRIMARY_ACTIONS = [
   {
+    label: "直接修改当前文件",
+    prompt: "请直接修改当前文件，按我的需求生成完整的新文件内容，并准备立即应用到编辑器。",
+  },
+  {
     label: "分析当前文件",
     prompt: "请分析当前文件的作用、关键结构、潜在问题，并给出可执行的改进建议。",
   },
@@ -48,7 +52,7 @@ export function QuickActions({ onSubmitPrompt }: QuickActionsProps) {
     <section className="action-panel">
       <div className="section-head">
         <h2>快捷任务</h2>
-        <p>先从当前文件出发，再决定是否扩展到整个项目。</p>
+        <p>优先操作当前文件，需要时再扩展到整个项目。</p>
       </div>
 
       <div className="action-group">

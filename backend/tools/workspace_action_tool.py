@@ -43,7 +43,7 @@ class WorkspaceActionTool:
         prepared_actions: list[FileActionModel] = []
         notes: list[str] = []
 
-        for parsed_action in parsed_actions[:6]:
+        for parsed_action in parsed_actions[:8]:
             resolved_path = self._resolve_target_path(root, parsed_action.target_file)
             if resolved_path is None:
                 notes.append(f"已忽略越界路径：{parsed_action.target_file}")

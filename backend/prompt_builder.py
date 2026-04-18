@@ -1,4 +1,4 @@
-from backend.models import AgentContextModel
+from backend.models import AgentContextModel, ConversationTurnModel
 from backend.tools.workspace_plan_tool import PlannedWorkspaceAction
 from backend.tools.workspace_search_tool import WorkspaceSearchResult
 
@@ -16,7 +16,7 @@ def build_system_prompt(
     single_file_mode: bool = False,
 ) -> str:
     base_prompt = (
-        "You are Vibe Coding Agent, a warm Chinese-first programming assistant inside VS Code. "
+        "You are Code Agent, a warm Chinese-first programming assistant inside VS Code. "
         "Be concise, practical, and educational. "
         "When code context is available, prioritize it over generic advice. "
         "Reply in Chinese unless the user clearly asks for another language."
@@ -26,6 +26,8 @@ def build_system_prompt(
         proposal_rules = (
             "You are in workspace-change planning mode. "
             "You must first understand the project context, then propose a small and coherent set of file actions. "
+            "Treat the workspace candidate files as primary evidence. "
+            "If the user asks about the whole project, workspace, codebase, or multiple files, do not limit the plan to the active file. "
             "Return exactly these XML sections in order: "
             "<assistant_reply>...</assistant_reply>"
             "<proposal_summary>...</proposal_summary>"
@@ -40,6 +42,7 @@ def build_system_prompt(
             "If the user asks to change code and only one file is relevant, you must still return exactly one update_file action for that file. "
             "Do not claim that changes are already embedded in the original file unless <actions></actions> is intentionally empty because no file should change. "
             "Choose the smallest reasonable set of actions. "
+            "For project-wide refactors, prefer 2 to 5 related actions instead of only 1 action. "
             "Do not output diffs. Always output full file contents for each changed file. "
             "Do not output malformed tags such as (actions>. "
             "If you cannot produce a safe change plan, return an empty <actions></actions> block and explain why."
@@ -64,7 +67,12 @@ def build_system_prompt(
 
 # 函数说明：
 # 构造普通问答模式的用户提示词。
-def build_user_prompt(prompt: str, context: AgentContextModel, current_notes: str) -> str:
+def build_user_prompt(
+    prompt: str,
+    context: AgentContextModel,
+    current_notes: str,
+    conversation_history: list[ConversationTurnModel] | None = None,
+) -> str:
     selected = context.selectedText.strip() if context.selectedText else "(none)"
     workspace_root = context.workspaceRoot or "(none)"
     active_file = context.activeFile or "(none)"
@@ -83,6 +91,7 @@ def build_user_prompt(prompt: str, context: AgentContextModel, current_notes: st
         f"- Language id: {language_id}\n"
         f"- Selected text:\n{selected}\n\n"
         f"- Document excerpt:\n{document if document else '(empty)'}\n\n"
+        f"{_build_conversation_history_block(conversation_history)}"
         "Current-file analysis:\n"
         f"{current_notes}\n\n"
         "Response goals:\n"
@@ -101,43 +110,51 @@ def build_workspace_action_prompt(
     context: AgentContextModel,
     current_notes: str,
     workspace_result: WorkspaceSearchResult,
+    conversation_history: list[ConversationTurnModel] | None = None,
 ) -> str:
     selected = context.selectedText.strip() if context.selectedText else "(none)"
     workspace_root = context.workspaceRoot or "(none)"
     active_file = context.activeFile or "(none)"
     language_id = context.languageId or "(unknown)"
+    project_scope_request = _looks_like_project_scope_request(prompt)
     active_full_text = (context.fullDocumentText or "").strip()
 
     if not active_full_text:
         active_full_text = "(missing full document text)"
+    else:
+        max_chars = 2200 if project_scope_request else 5000
+        active_full_text = _truncate_text(active_full_text, max_chars)
 
     return (
         "User request:\n"
         f"{prompt.strip()}\n\n"
-        "Active editor context:\n"
+        "Workspace context:\n"
         f"- Workspace root: {workspace_root}\n"
         f"- Active file: {active_file}\n"
         f"- Language id: {language_id}\n"
         f"- Selected text:\n{selected}\n\n"
+        f"{_build_conversation_history_block(conversation_history)}"
+        "Relevant workspace files:\n"
+        f"{workspace_result.to_prompt_text()}\n\n"
         "Current active file analysis:\n"
         f"{current_notes}\n\n"
-        "Current active file full content:\n"
+        "Current active file reference content:\n"
         "<active_file>\n"
         f"{active_full_text}\n"
         "</active_file>\n\n"
-        "Relevant workspace files:\n"
-        f"{workspace_result.to_prompt_text()}\n\n"
         "Planning rules:\n"
         "1. First decide which files really need to change.\n"
-        "2. Prefer at most 4 actions in one plan.\n"
-        "3. Source code updates should use update_file.\n"
-        "4. README.md or docs/*.md changes should use update_documentation.\n"
-        "5. New helper modules or new docs files should use create_file or update_documentation.\n"
-        "6. Use workspace-relative paths in <target_file>.\n"
-        "7. Avoid unrelated edits.\n"
-        "8. Keep the result easy to read, and add concise Chinese comments only where they are necessary.\n"
-        "9. If only the active file needs to change, still return one update_file action for the active file.\n"
-        "10. Do not say the file has already been changed unless you also provide the updated_content for that file."
+        "2. If the request is project-wide, prefer 2 to 5 related actions.\n"
+        "3. Do not focus only on the active file when the request is about the project or workspace.\n"
+        "4. Source code updates should use update_file.\n"
+        "5. README.md or docs/*.md changes should use update_documentation.\n"
+        "6. New helper modules or new docs files should use create_file or update_documentation.\n"
+        "7. Use workspace-relative paths in <target_file>.\n"
+        "8. Avoid unrelated edits.\n"
+        "9. Keep the result easy to read, and add concise Chinese comments only where they are necessary.\n"
+        "10. If only the active file needs to change, still return one update_file action for the active file.\n"
+        "11. Do not say the file has already been changed unless you also provide the updated_content for that file.\n"
+        "12. Prefer touching files that appear in the relevant workspace file list above."
     )
 
 
@@ -175,6 +192,7 @@ def build_single_file_action_prompt(
     workspace_result: WorkspaceSearchResult,
     planned_action: PlannedWorkspaceAction,
     original_content: str,
+    conversation_history: list[ConversationTurnModel] | None = None,
 ) -> str:
     selected = context.selectedText.strip() if context.selectedText else "(none)"
     workspace_root = context.workspaceRoot or "(none)"
@@ -190,6 +208,7 @@ def build_single_file_action_prompt(
         f"- Active file: {active_file}\n"
         f"- Language id: {language_id}\n"
         f"- Selected text:\n{selected}\n\n"
+        f"{_build_conversation_history_block(conversation_history)}"
         "Current-file analysis:\n"
         f"{current_notes}\n\n"
         "Selected target action:\n"
@@ -211,6 +230,75 @@ def build_single_file_action_prompt(
         "5. Keep comments concise and formal.\n"
         "6. Do not output summaries, XML tags, HTML tags, diff format, or markdown code fences.\n"
         "7. Do not omit code with placeholders such as TODO, omitted, brevity, 或“此处省略”。"
+    )
+
+
+# 函数说明：
+# 为当前活动文件的直接改写模式构造提示词。
+def build_current_file_edit_prompt(
+    prompt: str,
+    context: AgentContextModel,
+    current_notes: str,
+    original_content: str,
+    conversation_history: list[ConversationTurnModel] | None = None,
+) -> str:
+    selected = context.selectedText.strip() if context.selectedText else "(none)"
+    workspace_root = context.workspaceRoot or "(none)"
+    active_file = context.activeFile or "(none)"
+    language_id = context.languageId or "(unknown)"
+
+    return (
+        "User request:\n"
+        f"{prompt.strip()}\n\n"
+        "Direct-edit context:\n"
+        f"- Workspace root: {workspace_root}\n"
+        f"- Active file: {active_file}\n"
+        f"- Language id: {language_id}\n"
+        f"- Selected text:\n{selected}\n\n"
+        f"{_build_conversation_history_block(conversation_history)}"
+        "Current-file analysis:\n"
+        f"{current_notes}\n\n"
+        "Current active file full content:\n"
+        "<active_file_content>\n"
+        f"{_truncate_text(original_content, 14000)}\n"
+        "</active_file_content>\n\n"
+        "Rewrite rules:\n"
+        "1. You are editing the current active file only.\n"
+        "2. Return the full final content of the active file only.\n"
+        "3. If selected text is provided, prioritize the requested change around that code region.\n"
+        "4. Keep unrelated code unchanged unless a small supporting refactor is required.\n"
+        "5. Preserve the file's main behavior while completing the requested modification.\n"
+        "6. For Python files, ensure the final code is syntactically valid.\n"
+        "7. Keep Chinese comments concise and formal when comments are necessary.\n"
+        "8. Do not output XML, HTML, markdown fences, summaries, placeholders, or diff format.\n"
+        "9. Do not claim that the file has already been changed; output the changed full file content directly."
+    )
+
+
+# 函数说明：
+# 当当前文件直接改写结果无效时，要求模型重新只返回完整文件内容。
+def build_current_file_edit_repair_prompt(
+    prompt: str,
+    active_file: str,
+    invalid_output: str,
+    validation_error: str,
+) -> str:
+    return (
+        "The previous direct-edit answer for the active file was invalid.\n"
+        f"User request:\n{prompt.strip()}\n\n"
+        "Active file:\n"
+        f"{active_file}\n\n"
+        "Validation error:\n"
+        f"{validation_error}\n\n"
+        "Previous invalid output:\n"
+        "<previous_output>\n"
+        f"{_truncate_text(invalid_output, 6000)}\n"
+        "</previous_output>\n\n"
+        "Repair rules:\n"
+        "1. Return ONLY the full final file content.\n"
+        "2. Do not output XML, HTML, markdown fences, summaries, or explanations.\n"
+        "3. Do not omit code.\n"
+        "4. Keep the response focused on the current active file."
     )
 
 
@@ -267,8 +355,45 @@ def _build_related_file_context(workspace_result: WorkspaceSearchResult, target_
 
 
 # 函数说明：
+# 判断当前请求是否更接近项目级或多文件范围，用于控制提示词的侧重点。
+def _looks_like_project_scope_request(prompt: str) -> bool:
+    normalized = prompt.strip().lower()
+    keywords = [
+        "整个项目",
+        "项目级",
+        "工程级",
+        "工作区",
+        "多文件",
+        "多个文件",
+        "项目代码",
+        "codebase",
+        "workspace",
+        "project",
+        "multiple files",
+        "across files",
+    ]
+    return any(keyword in normalized for keyword in keywords)
+
+
+# 函数说明：
 # 将较长文本截断到提示词可接受的长度。
 def _truncate_text(content: str, max_chars: int) -> str:
     if len(content) <= max_chars:
         return content
     return content[:max_chars] + "\n...[truncated]"
+
+
+# 函数说明：
+# 将最近对话整理为提示词片段，帮助模型理解连续对话意图。
+def _build_conversation_history_block(
+    conversation_history: list[ConversationTurnModel] | None,
+) -> str:
+    if not conversation_history:
+        return ""
+
+    lines = ["Recent conversation:"]
+    for turn in conversation_history[-6:]:
+        speaker = "User" if turn.role == "user" else "Assistant"
+        lines.append(f"- {speaker}: {turn.content.strip()}")
+
+    return "\n".join(lines) + "\n\n"

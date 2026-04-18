@@ -2,22 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Vibe Coding Agent",
-      "type": "extensionHost",
-      "request": "launch",
-      "runtimeExecutable": "D:\\VS code\\Microsoft VS Code\\Code.exe",
-      "args": [
-        "--new-window",
-        "--extensionDevelopmentPath=${workspaceFolder}",
-        "${workspaceFolder}"
-      ],
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "preLaunchTask": "npm: build"
-    },
-    {
-      "name": "Run Vibe Coding Agent (Isolated)",
+      "name": "Run Code Agent (Isolated)",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "D:\\VS code\\Microsoft VS Code\\Code.exe",
@@ -25,7 +10,22 @@
         "--new-window",
         "--disable-extensions",
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "${workspaceFolder}"
+        "${workspaceFolder}\\examples\\student_score_project"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "preLaunchTask": "npm: build"
+    },
+    {
+      "name": "Run Code Agent (With Extensions)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "D:\\VS code\\Microsoft VS Code\\Code.exe",
+      "args": [
+        "--new-window",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}\\examples\\student_score_project"
       ],
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"

@@ -1,4 +1,4 @@
-import { AgentContext, AgentResponse, ModelProvider } from "../types";
+import { AgentContext, AgentResponse, ConversationTurn, ModelProvider } from "../types";
 
 // 文件说明：
 // 本文件定义用于界面联调的 Mock 提供者。
@@ -12,7 +12,11 @@ export class MockModelProvider implements ModelProvider {
 
   // 方法说明：
   // 根据当前上下文返回一段固定的调试说明。
-  public async generate(prompt: string, context: AgentContext): Promise<AgentResponse> {
+  public async generate(
+    prompt: string,
+    context: AgentContext,
+    _conversationHistory: ConversationTurn[] = [],
+  ): Promise<AgentResponse> {
     const focus = context.selectedText
       ? "检测到选中代码，因此回复会优先围绕该片段展开。"
       : "当前没有选中代码，因此回复将基于活动文件上下文。";
@@ -40,6 +44,7 @@ export class MockModelProvider implements ModelProvider {
       actions: [],
       appliedActions: [],
       requiresConfirmation: false,
+      autoApplyActions: false,
       proposalSummary: "",
     };
   }

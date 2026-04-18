@@ -1,6 +1,6 @@
 {
   "name": "vibe-coding-agent",
-  "displayName": "Vibe Coding Agent",
+  "displayName": "Code Agent",
   "description": "A VS Code AI agent prototype for assisted programming with a Python backend, Ollama integration, VRM avatar hooks, and LoRA-ready model serving.",
   "version": "0.2.0",
   "publisher": "graduation-project",
@@ -31,6 +31,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onCommand:vibeCodingAgent.start",
+    "onCommand:vibeCodingAgent.editCurrentFile",
     "onView:vibeCodingAgent.sidebar"
   ],
   "main": "./dist/extension.js",
@@ -38,14 +39,18 @@
     "commands": [
       {
         "command": "vibeCodingAgent.start",
-        "title": "Vibe Coding Agent: Open Assistant"
+        "title": "Code Agent: Open Assistant"
+      },
+      {
+        "command": "vibeCodingAgent.editCurrentFile",
+        "title": "Code Agent: Edit Current File"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "vibeCodingAgent",
-          "title": "Vibe Agent",
+          "title": "Code Agent",
           "icon": "backend/icon.jpg"
         }
       ]
@@ -55,12 +60,12 @@
         {
           "type": "webview",
           "id": "vibeCodingAgent.sidebar",
-          "name": "Assistant"
+          "name": "Code Agent"
         }
       ]
     },
     "configuration": {
-      "title": "Vibe Coding Agent",
+      "title": "Code Agent",
       "properties": {
         "vibeCodingAgent.modelProvider": {
           "type": "string",
@@ -106,6 +111,10 @@
     "watch:extension": "tsc -watch -p ./",
     "watch:webview": "esbuild webview-src/main.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=media/webview.js --watch",
     "package": "vsce package"
+  },
+  "dependencies": {
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

@@ -13,6 +13,6 @@ if (!rootElement) {
 const avatarUri = document.body.dataset.avatarUri;
 createRoot(rootElement).render(
   <React.StrictMode>
-    <App avatarUri={avatarUri} />
+    <App />
   </React.StrictMode>
 );

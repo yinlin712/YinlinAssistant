@@ -10,6 +10,13 @@ export interface ChatMessage {
   content: string;
 }
 
+// 类型说明：
+// 表示流式对话片段消息。
+export interface MessageChunkPayload {
+  role: Extract<ChatRole, "agent">;
+  chunk: string;
+}
+
 export type ActionKind = "create_file" | "update_file" | "update_documentation";
 
 // 类型说明：
@@ -27,11 +34,13 @@ export interface PendingProposalPayload {
   title: string;
   summary: string;
   actions: ProposalActionPreview[];
+  isStreaming: boolean;
 }
 
 // 类型说明：
 // 表示首次加载 Webview 时所需的完整初始化数据。
 export interface HydratePayload {
+  sessionId: string;
   messages: ChatMessage[];
   status: string;
   provider: string;
@@ -54,6 +63,17 @@ export interface StatusPayload {
 // 类型说明：
 // 约束插件端下发给 Webview 的消息格式。
 export interface WebviewIncomingMessage {
-  type: "hydrate" | "message" | "status" | "proposal" | "clearProposal";
+  type: "hydrate" | "message" | "messageChunk" | "status" | "proposal" | "clearProposal";
   payload: unknown;
+}
+
+export interface PersistedWebviewState {
+  sessionId: string;
+  messages: ChatMessage[];
+  status: string;
+  provider: string;
+  activeFile: string;
+  emptyProposalText: string;
+  proposal: PendingProposalPayload | null;
+  streamingAgentContent: string;
 }

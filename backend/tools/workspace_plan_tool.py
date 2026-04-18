@@ -7,14 +7,26 @@ from backend.request_classifier import mentions_documentation
 from backend.tools.workspace_search_tool import WorkspaceSearchResult
 
 # 文件说明：
-# 本文件负责在模型结构化输出不稳定时，使用规则化方式规划候选动作。
-# 它不是最终执行器，而是为“逐文件改写模式”提供稳定的目标文件集合。
+# 本文件在结构化输出不稳定时，先用规则方式规划一组更可信的目标文件。
+# 该规划结果会作为后续逐文件改写的输入，因此重点是“范围合理”和“路径稳定”。
 
 DOCUMENTATION_SUFFIXES = {".md", ".rst", ".txt"}
+PROJECT_SCOPE_KEYWORDS = {
+    "整个项目",
+    "项目级",
+    "工程级",
+    "工作区",
+    "多文件",
+    "多个文件",
+    "项目代码",
+    "codebase",
+    "workspace",
+    "project",
+    "multiple files",
+    "across files",
+}
 
 
-# 数据说明：
-# 表示一个规则化规划得到的候选动作。
 @dataclass
 class PlannedWorkspaceAction:
     kind: AgentActionKind
@@ -23,19 +35,17 @@ class PlannedWorkspaceAction:
     rationale: str = ""
 
 
-# 数据说明：
-# 表示规则化规划阶段的整体结果。
 @dataclass
 class WorkspacePlanResult:
     actions: list[PlannedWorkspaceAction] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
 
-# 类说明：
-# 负责在弱模型条件下，为项目级修改先挑出更可能需要修改的文件。
 class WorkspacePlanTool:
-    # 方法说明：
-    # 基于活动文件、显式路径和请求意图生成候选动作。
+    """
+    在弱模型场景下为项目级请求先挑出更值得修改的目标文件。
+    """
+
     def plan(
         self,
         context: AgentContextModel,
@@ -44,13 +54,15 @@ class WorkspacePlanTool:
     ) -> WorkspacePlanResult:
         workspace_root = (context.workspaceRoot or "").strip()
         if not workspace_root:
-            return WorkspacePlanResult(notes=["当前工作区不可用，无法兜底规划项目级修改。"])
+            return WorkspacePlanResult(notes=["当前工作区不可用，无法规划项目级修改。"])
 
         root = Path(workspace_root).resolve()
         normalized_prompt = prompt.strip().lower()
+        project_scope = self._is_project_scope_request(normalized_prompt)
         documentation_requested = mentions_documentation(prompt)
         docs_only_request = documentation_requested and not self._mentions_code_change(normalized_prompt)
         create_requested = self._mentions_creation(normalized_prompt)
+        max_actions = 5 if project_scope else 3
 
         candidate_paths = {
             snapshot.relative_path.replace("\\", "/").lower(): snapshot.relative_path.replace("\\", "/")
@@ -79,7 +91,7 @@ class WorkspacePlanTool:
             elif create_requested:
                 kind = "create_file"
             else:
-                notes.append(f"检测到显式路径 {relative_path}，但该文件当前不存在，因此暂不纳入动作方案。")
+                notes.append(f"检测到显式路径 {relative_path}，但目标文件当前不存在，因此暂不纳入动作方案。")
                 continue
 
             self._add_action(
@@ -88,11 +100,11 @@ class WorkspacePlanTool:
                     kind=kind,
                     target_file=relative_path,
                     summary=self._build_summary(kind, relative_path, context),
-                    rationale="用户请求中显式提到了这个文件。",
+                    rationale="用户请求中显式提到了该文件。",
                 ),
             )
 
-        if not docs_only_request:
+        if not docs_only_request and not project_scope:
             active_relative = self._active_file_relative_path(context, root)
             if active_relative:
                 self._add_action(
@@ -101,7 +113,7 @@ class WorkspacePlanTool:
                         kind="update_file",
                         target_file=active_relative,
                         summary=self._build_summary("update_file", active_relative, context),
-                        rationale="当前活动文件通常是本轮修改的第一优先级。",
+                        rationale="当前请求更接近当前文件改写，因此优先保留活动文件。",
                     ),
                 )
 
@@ -114,33 +126,20 @@ class WorkspacePlanTool:
                         kind="update_documentation",
                         target_file=documentation_target,
                         summary=self._build_summary("update_documentation", documentation_target, context),
-                        rationale="用户请求中包含文档或说明更新意图。",
+                        rationale="请求中包含明确的文档更新意图。",
                     ),
                 )
 
-        if len(selected) < 2 and not docs_only_request:
-            for snapshot in search_result.candidate_files:
-                relative_path = snapshot.relative_path.replace("\\", "/")
-                if self._is_documentation_path(relative_path):
-                    continue
+        self._add_ranked_code_candidates(
+            selected=selected,
+            search_result=search_result,
+            context=context,
+            max_actions=max_actions,
+            include_active=True,
+        )
 
-                self._add_action(
-                    selected,
-                    PlannedWorkspaceAction(
-                        kind="update_file",
-                        target_file=relative_path,
-                        summary=self._build_summary("update_file", relative_path, context),
-                        rationale="它是工作区检索结果中得分较高的代码文件。",
-                    ),
-                )
+        return WorkspacePlanResult(actions=list(selected.values())[:max_actions], notes=notes)
 
-                if len(selected) >= 2:
-                    break
-
-        return WorkspacePlanResult(actions=list(selected.values())[:3], notes=notes)
-
-    # 方法说明：
-    # 将动作加入候选集合，并以目标路径去重。
     def _add_action(
         self,
         selected: dict[str, PlannedWorkspaceAction],
@@ -150,14 +149,12 @@ class WorkspacePlanTool:
         if key not in selected:
             selected[key] = action
 
-    # 方法说明：
-    # 从用户请求中提取显式提到的文件路径。
     def _extract_explicit_paths(self, prompt: str) -> list[str]:
         matches = re.findall(r"[A-Za-z0-9_./\\\\-]+\.[A-Za-z0-9]+", prompt)
         cleaned: list[str] = []
 
         for match in matches:
-            normalized = match.strip(" \t\r\n,.;:，。；：()[]{}<>").replace("\\", "/")
+            normalized = match.strip(" \t\r\n,.;:，。；：)[]{}<>").replace("\\", "/")
             if not normalized:
                 continue
             if normalized.lower() not in {item.lower() for item in cleaned}:
@@ -165,14 +162,10 @@ class WorkspacePlanTool:
 
         return cleaned
 
-    # 方法说明：
-    # 判断请求中是否显式包含“新建文件”意图。
     def _mentions_creation(self, normalized_prompt: str) -> bool:
         keywords = ["新建", "新增", "创建", "create", "add", "new file"]
         return any(keyword in normalized_prompt for keyword in keywords)
 
-    # 方法说明：
-    # 判断请求是否明确指向代码层面的修改，而不只是文档说明。
     def _mentions_code_change(self, normalized_prompt: str) -> bool:
         keywords = [
             "代码",
@@ -195,14 +188,10 @@ class WorkspacePlanTool:
         ]
         return any(keyword in normalized_prompt for keyword in keywords)
 
-    # 方法说明：
-    # 判断请求中提到的文档修改是否只是“可选项”。
     def _documentation_is_optional(self, normalized_prompt: str) -> bool:
         optional_markers = ["必要时", "如果需要", "视情况", "可选", "if needed", "if necessary", "optionally"]
         return any(marker in normalized_prompt for marker in optional_markers)
 
-    # 方法说明：
-    # 将当前活动文件转换为相对工作区路径。
     def _active_file_relative_path(self, context: AgentContextModel, root: Path) -> str | None:
         if not context.activeFile:
             return None
@@ -212,8 +201,6 @@ class WorkspacePlanTool:
         except ValueError:
             return None
 
-    # 方法说明：
-    # 在需要文档动作时，为请求挑选最合适的文档目标文件。
     def _pick_documentation_target(self, root: Path, search_result: WorkspaceSearchResult) -> str | None:
         readme_path = root / "README.md"
         if readme_path.exists():
@@ -230,8 +217,6 @@ class WorkspacePlanTool:
 
         return None
 
-    # 方法说明：
-    # 判断相对路径是否应视为文档文件。
     def _is_documentation_path(self, relative_path: str) -> bool:
         normalized = relative_path.replace("\\", "/").lower()
         suffix = Path(normalized).suffix.lower()
@@ -241,8 +226,6 @@ class WorkspacePlanTool:
             or suffix in DOCUMENTATION_SUFFIXES
         )
 
-    # 方法说明：
-    # 为规则化规划生成简洁摘要。
     def _build_summary(
         self,
         kind: AgentActionKind,
@@ -268,3 +251,56 @@ class WorkspacePlanTool:
             return f"根据当前需求优化活动文件：{relative_path}"
 
         return f"根据项目上下文更新相关文件：{relative_path}"
+
+    def _add_ranked_code_candidates(
+        self,
+        selected: dict[str, PlannedWorkspaceAction],
+        search_result: WorkspaceSearchResult,
+        context: AgentContextModel,
+        max_actions: int,
+        include_active: bool,
+    ) -> None:
+        directory_counts: dict[str, int] = {}
+
+        for action in selected.values():
+            directory = str(Path(action.target_file).parent).replace("\\", "/")
+            directory_counts[directory] = directory_counts.get(directory, 0) + 1
+
+        active_relative = ""
+        if context.workspaceRoot and context.activeFile:
+            try:
+                active_relative = str(
+                    Path(context.activeFile).resolve().relative_to(Path(context.workspaceRoot).resolve())
+                ).replace("\\", "/").lower()
+            except ValueError:
+                active_relative = ""
+
+        for snapshot in search_result.candidate_files:
+            if len(selected) >= max_actions:
+                break
+
+            relative_path = snapshot.relative_path.replace("\\", "/")
+            normalized_relative = relative_path.lower()
+            if self._is_documentation_path(relative_path):
+                continue
+            if not include_active and normalized_relative == active_relative:
+                continue
+
+            directory = str(Path(relative_path).parent).replace("\\", "/")
+            if directory not in {"", "."} and directory_counts.get(directory, 0) >= 2:
+                continue
+
+            self._add_action(
+                selected,
+                PlannedWorkspaceAction(
+                    kind="update_file",
+                    target_file=relative_path,
+                    summary=self._build_summary("update_file", relative_path, context),
+                    rationale="该文件在工作区检索结果中得分较高，适合作为项目级修改目标。",
+                ),
+            )
+
+            directory_counts[directory] = directory_counts.get(directory, 0) + 1
+
+    def _is_project_scope_request(self, normalized_prompt: str) -> bool:
+        return any(keyword in normalized_prompt for keyword in PROJECT_SCOPE_KEYWORDS)

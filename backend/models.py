@@ -28,10 +28,18 @@ class AgentContextModel(BaseModel):
 
 
 # 模型说明：
+# 表示插件端传递给后端的最近对话上下文。
+class ConversationTurnModel(BaseModel):
+    role: Literal["user", "agent"]
+    content: str
+
+
+# 模型说明：
 # 表示一次后端生成请求。
 class GenerateRequest(BaseModel):
     prompt: str
     context: AgentContextModel
+    conversationHistory: list[ConversationTurnModel] = Field(default_factory=list)
 
 
 # 模型说明：
@@ -51,4 +59,5 @@ class GenerateResponse(BaseModel):
     mood: Mood = "helpful"
     actions: list[FileActionModel] = Field(default_factory=list)
     requiresConfirmation: bool = False
+    autoApplyActions: bool = False
     proposalSummary: str = Field(default="")

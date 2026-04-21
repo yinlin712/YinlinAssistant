@@ -19,6 +19,7 @@ from backend.prompt_builder import (
 )
 from backend.request_classifier import should_directly_edit_current_file, should_propose_workspace_changes
 from backend.structured_response import ParsedAction, parse_action_plan_response, parse_single_file_response
+from backend.tools.action_risk_tool import ActionRiskSummary
 from backend.tools.workspace_action_tool import WorkspaceActionPreparationResult
 from backend.tools.workspace_search_tool import WorkspaceSearchResult
 
@@ -205,6 +206,13 @@ class CodingAgentService:
             parsed_single.summary,
             f"根据当前需求修改活动文件：{Path(active_file).name}",
         )
+        current_file_action = self._build_current_file_action(
+            active_file=active_file,
+            original_content=original_content,
+            updated_content=updated_content,
+            summary=summary,
+        )
+        risk_summary = self._annotate_actions_with_risk([current_file_action], request.context)
 
         return GenerateResponse(
             content=(
@@ -212,17 +220,15 @@ class CodingAgentService:
                 "插件端可以立即应用这次改写；如果你暂时不想写回，也可以先保留预览。"
             ),
             mood="helpful",
-            actions=[
-                self._build_current_file_action(
-                    active_file=active_file,
-                    original_content=original_content,
-                    updated_content=updated_content,
-                    summary=summary,
-                )
-            ],
+            actions=[current_file_action],
             requiresConfirmation=True,
             autoApplyActions=True,
-            proposalSummary=f"当前文件直改：{Path(active_file).name}；{summary}",
+            proposalSummary=(
+                f"当前文件直改：{Path(active_file).name}；"
+                f"风险：{self._risk_level_label(risk_summary.overall_level)}"
+                f"（{risk_summary.overall_reason}）；"
+                f"{current_file_action.summary}"
+            ),
         )
 
     # 方法说明：
@@ -253,6 +259,11 @@ class CodingAgentService:
             )
 
         workspace_result = self.workflow.inspect_workspace(request.context, request.prompt)
+        semantic_result = self.workflow.inspect_workspace_semantics(
+            request.context,
+            request.prompt,
+            workspace_result,
+        )
         plan_result = self.workflow.plan_workspace_actions(
             request.context,
             request.prompt,
@@ -265,6 +276,7 @@ class CodingAgentService:
             request.context,
             current_notes,
             workspace_result,
+            semantic_result.to_prompt_text(),
             request.conversationHistory,
         )
 
@@ -291,6 +303,7 @@ class CodingAgentService:
                 request.context,
                 current_notes,
                 workspace_result,
+                semantic_result.to_prompt_text(),
                 content,
             )
 
@@ -318,7 +331,13 @@ class CodingAgentService:
             preparation.actions,
             minimum_action_count,
         ):
-            return self._build_structured_action_response(parsed, preparation)
+            risk_summary = self._annotate_preparation_with_risk(preparation, request.context)
+            return self._build_structured_action_response(
+                parsed,
+                preparation,
+                semantic_result.to_user_summary(),
+                risk_summary,
+            )
 
         fallback_preparation, fallback_notes = self._generate_fallback_actions(
             request,
@@ -338,21 +357,43 @@ class CodingAgentService:
         ):
             demo_notes = list(fallback_notes)
             demo_notes.append("当前使用的是演示保底方案，用于在弱模型条件下稳定展示 diff 预览与确认应用流程。")
-            return self._build_fallback_action_response(demo_preparation, demo_notes)
+            risk_summary = self._annotate_preparation_with_risk(demo_preparation, request.context)
+            return self._build_fallback_action_response(
+                demo_preparation,
+                demo_notes,
+                semantic_result.to_user_summary(),
+                risk_summary,
+            )
 
         if fallback_preparation.actions:
-            return self._build_fallback_action_response(fallback_preparation, fallback_notes)
+            risk_summary = self._annotate_preparation_with_risk(fallback_preparation, request.context)
+            return self._build_fallback_action_response(
+                fallback_preparation,
+                fallback_notes,
+                semantic_result.to_user_summary(),
+                risk_summary,
+            )
 
         if demo_preparation.actions:
             demo_notes = list(fallback_notes)
             demo_notes.append("当前使用的是演示保底方案，用于在弱模型条件下稳定展示 diff 预览与确认应用流程。")
-            return self._build_fallback_action_response(demo_preparation, demo_notes)
+            risk_summary = self._annotate_preparation_with_risk(demo_preparation, request.context)
+            return self._build_fallback_action_response(
+                demo_preparation,
+                demo_notes,
+                semantic_result.to_user_summary(),
+                risk_summary,
+            )
 
         reply = parsed.assistant_reply or "我已经完成项目检索，但这次还没有稳定生成可执行的结构化动作。"
         combined_notes = fallback_notes or preparation.notes
         if combined_notes:
             note_text = "\n".join(f"- {note}" for note in combined_notes)
             reply = f"{reply}\n\n补充说明：\n{note_text}"
+
+        semantic_summary = semantic_result.to_user_summary()
+        if semantic_summary:
+            reply = f"{reply}\n\n{semantic_summary}"
 
         if "结构化" not in reply:
             reply = f"{reply}\n\n这次我没有提取到可执行的结构化文件动作，所以暂时无法生成 diff 预览。"
@@ -655,9 +696,28 @@ class CodingAgentService:
         self,
         parsed_response,
         preparation: WorkspaceActionPreparationResult,
+        semantic_summary: str,
+        risk_summary: ActionRiskSummary,
     ) -> GenerateResponse:
         reply = parsed_response.assistant_reply or "我已经完成项目检索，并生成了一组待确认的文件变更方案。"
-        proposal_summary = parsed_response.proposal_summary or self._build_proposal_summary(preparation)
+        if semantic_summary:
+            reply = f"{reply}\n\n{semantic_summary}"
+
+        if risk_summary.assessments:
+            reply = (
+                f"{reply}\n\n整体风险：{self._risk_level_label(risk_summary.overall_level)}"
+                f"（{risk_summary.overall_reason}）"
+            )
+
+        proposal_summary = parsed_response.proposal_summary or self._build_proposal_summary(
+            preparation,
+            risk_summary,
+        )
+        if risk_summary.assessments and "风险" not in proposal_summary:
+            proposal_summary = (
+                f"{proposal_summary}；整体风险：{self._risk_level_label(risk_summary.overall_level)}"
+                f"（{risk_summary.overall_reason}）"
+            )
 
         return GenerateResponse(
             content=reply,
@@ -674,6 +734,8 @@ class CodingAgentService:
         self,
         preparation: WorkspaceActionPreparationResult,
         notes: list[str],
+        semantic_summary: str,
+        risk_summary: ActionRiskSummary,
     ) -> GenerateResponse:
         affected_files = "、".join(Path(action.targetFile).name for action in preparation.actions[:3])
         reply = (
@@ -681,6 +743,15 @@ class CodingAgentService:
             f"本次涉及的文件有：{affected_files}。"
             "你可以先查看 diff 预览，再决定是否应用。"
         )
+
+        if semantic_summary:
+            reply = f"{reply}\n\n{semantic_summary}"
+
+        if risk_summary.assessments:
+            reply = (
+                f"{reply}\n\n整体风险：{self._risk_level_label(risk_summary.overall_level)}"
+                f"（{risk_summary.overall_reason}）"
+            )
 
         helpful_notes = [note for note in notes if note][:4]
         if helpful_notes:
@@ -692,17 +763,82 @@ class CodingAgentService:
             actions=preparation.actions,
             requiresConfirmation=True,
             autoApplyActions=False,
-            proposalSummary=self._build_proposal_summary(preparation),
+            proposalSummary=self._build_proposal_summary(preparation, risk_summary),
         )
 
     # 方法说明：
     # 为预览面板构造简洁摘要。
-    def _build_proposal_summary(self, preparation: WorkspaceActionPreparationResult) -> str:
+    def _build_proposal_summary(
+        self,
+        preparation: WorkspaceActionPreparationResult,
+        risk_summary: ActionRiskSummary | None = None,
+    ) -> str:
         if not preparation.actions:
             return ""
 
         parts = [f"{Path(action.targetFile).name}：{action.summary}" for action in preparation.actions[:3]]
-        return f"共生成 {len(preparation.actions)} 个待确认变更；" + "；".join(parts)
+        prefix = f"共生成 {len(preparation.actions)} 个待确认变更"
+        if risk_summary and risk_summary.assessments:
+            prefix = (
+                f"{prefix}；整体风险：{self._risk_level_label(risk_summary.overall_level)}"
+                f"（{risk_summary.overall_reason}）"
+            )
+        return prefix + "；" + "；".join(parts)
+
+    # 方法说明：
+    # 对准备好的文件动作补充风险提示，并返回整体风险评估结果。
+    def _annotate_preparation_with_risk(
+        self,
+        preparation: WorkspaceActionPreparationResult,
+        context: AgentContextModel,
+    ) -> ActionRiskSummary:
+        return self._annotate_actions_with_risk(preparation.actions, context)
+
+    # 方法说明：
+    # 对动作摘要追加风险标签，保证前端在不调整结构时也能直接展示风险信息。
+    def _annotate_actions_with_risk(
+        self,
+        actions: list[FileActionModel],
+        context: AgentContextModel,
+    ) -> ActionRiskSummary:
+        preparation = WorkspaceActionPreparationResult(actions=actions)
+        risk_summary = self.workflow.assess_action_risk(context, preparation)
+        assessment_map = {
+            assessment.target_file.lower(): assessment
+            for assessment in risk_summary.assessments
+        }
+
+        for action in actions:
+            assessment = assessment_map.get(action.targetFile.lower())
+            if assessment is None:
+                continue
+            action.summary = self._decorate_action_summary_with_risk(action.summary, assessment)
+
+        return risk_summary
+
+    # 方法说明：
+    # 将风险结果转为适合直接展示在摘要中的中文标签。
+    def _decorate_action_summary_with_risk(self, summary: str, assessment) -> str:
+        label = self._risk_level_label(assessment.level)
+        normalized_summary = summary.strip()
+
+        if normalized_summary.startswith("[低风险]") or normalized_summary.startswith("[中风险]") or normalized_summary.startswith("[高风险]"):
+            return normalized_summary
+
+        if assessment.reason:
+            return f"[{label}] {normalized_summary}；{assessment.reason}"
+
+        return f"[{label}] {normalized_summary}"
+
+    # 方法说明：
+    # 将英文风险等级映射为前端和 README 更适合展示的中文文本。
+    def _risk_level_label(self, level: str) -> str:
+        mapping = {
+            "low": "低风险",
+            "medium": "中风险",
+            "high": "高风险",
+        }
+        return mapping.get(level, "中风险")
 
     # 方法说明：
     # 优先使用足够简洁的模型摘要，否则回退到规则化摘要。
@@ -845,6 +981,7 @@ class CodingAgentService:
         if not preparation.actions:
             return None
 
+        risk_summary = self._annotate_preparation_with_risk(preparation, request.context)
         first_action = preparation.actions[0]
         return GenerateResponse(
             content=(
@@ -855,7 +992,12 @@ class CodingAgentService:
             actions=[first_action],
             requiresConfirmation=True,
             autoApplyActions=True,
-            proposalSummary=f"当前文件直改：{Path(first_action.targetFile).name}；{first_action.summary}",
+            proposalSummary=(
+                f"当前文件直改：{Path(first_action.targetFile).name}；"
+                f"风险：{self._risk_level_label(risk_summary.overall_level)}"
+                f"（{risk_summary.overall_reason}）；"
+                f"{first_action.summary}"
+            ),
         )
 
     # 方法说明：

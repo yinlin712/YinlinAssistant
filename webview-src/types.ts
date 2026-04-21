@@ -1,7 +1,8 @@
 // 文件说明：
-// 本文件定义 React Webview 与插件端通信所需的消息和展示类型。
+// 本文件定义 Vue Webview 与插件端通信所需的消息和展示类型。
 
 export type ChatRole = "user" | "agent" | "system";
+export type AvatarMode = "prototype" | "vrm" | "airi-ready";
 
 // 类型说明：
 // 表示对话区中的一条消息。
@@ -67,6 +68,27 @@ export interface WebviewIncomingMessage {
   payload: unknown;
 }
 
+export interface AvatarConfig {
+  enabled: boolean;
+  mode: AvatarMode;
+  avatarUri?: string;
+  vrmUri?: string;
+  defaultPresetId?: string;
+  presets: AvatarPresetConfig[];
+}
+
+export interface AvatarPresetConfig {
+  id: string;
+  label: string;
+  avatarUri?: string;
+  vrmUri?: string;
+}
+
+export interface VisualPreferences {
+  backgroundOpacity: number;
+  chatOpacity: number;
+}
+
 export interface PersistedWebviewState {
   sessionId: string;
   messages: ChatMessage[];
@@ -76,4 +98,5 @@ export interface PersistedWebviewState {
   emptyProposalText: string;
   proposal: PendingProposalPayload | null;
   streamingAgentContent: string;
+  visualPreferences: VisualPreferences;
 }

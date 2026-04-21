@@ -110,6 +110,7 @@ def build_workspace_action_prompt(
     context: AgentContextModel,
     current_notes: str,
     workspace_result: WorkspaceSearchResult,
+    semantic_retrieval_text: str = "",
     conversation_history: list[ConversationTurnModel] | None = None,
 ) -> str:
     selected = context.selectedText.strip() if context.selectedText else "(none)"
@@ -136,6 +137,8 @@ def build_workspace_action_prompt(
         f"{_build_conversation_history_block(conversation_history)}"
         "Relevant workspace files:\n"
         f"{workspace_result.to_prompt_text()}\n\n"
+        "Semantic retrieval evidence:\n"
+        f"{semantic_retrieval_text or '(none)'}\n\n"
         "Current active file analysis:\n"
         f"{current_notes}\n\n"
         "Current active file reference content:\n"
@@ -165,9 +168,16 @@ def build_workspace_action_repair_prompt(
     context: AgentContextModel,
     current_notes: str,
     workspace_result: WorkspaceSearchResult,
+    semantic_retrieval_text: str,
     previous_output: str,
 ) -> str:
-    base_prompt = build_workspace_action_prompt(prompt, context, current_notes, workspace_result)
+    base_prompt = build_workspace_action_prompt(
+        prompt,
+        context,
+        current_notes,
+        workspace_result,
+        semantic_retrieval_text,
+    )
     return (
         f"{base_prompt}\n\n"
         "Previous invalid answer:\n"

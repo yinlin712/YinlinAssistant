@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import { CodingAgent } from "../core/agent";
@@ -46,6 +47,30 @@ interface PendingProposal {
   isStreaming: boolean;
 }
 
+interface AvatarResources {
+  enabled: boolean;
+  mode: "prototype" | "vrm" | "airi-ready";
+  avatarUri?: vscode.Uri | string;
+  vrmUri?: vscode.Uri | string;
+  defaultPresetId: string;
+  presets: AvatarPresetResource[];
+  localRoots: vscode.Uri[];
+}
+
+interface AvatarPresetResource {
+  id: string;
+  label: string;
+  avatarUri?: vscode.Uri | string;
+  vrmUri?: vscode.Uri | string;
+}
+
+interface AvatarPresetManifestItem {
+  id: string;
+  label: string;
+  avatarUri?: string;
+  vrmUri?: string;
+}
+
 /**
  * 统一管理 Webview 生命周期、消息分发和待确认方案状态。
  */
@@ -74,15 +99,17 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
    */
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
+    const avatarResources = this.resolveAvatarResources(webviewView.webview);
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [
         vscode.Uri.joinPath(this.extensionUri, "media"),
         vscode.Uri.joinPath(this.extensionUri, "backend"),
+        ...avatarResources.localRoots,
       ],
     };
 
-    webviewView.webview.html = this.getHtml(webviewView.webview);
+    webviewView.webview.html = this.getHtml(webviewView.webview, avatarResources);
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
       if (message.type === "submitPrompt") {
@@ -365,10 +392,24 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
   /**
    * 生成 Webview 页面所需的 HTML 外壳，并注入脚本、样式和头像资源。
    */
-  private getHtml(webview: vscode.Webview): string {
+  private getHtml(webview: vscode.Webview, avatarResources: AvatarResources): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "webview.js"));
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "styles.css"));
-    const avatarUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "backend", "icon.jpg"));
+    const avatarUri = this.toWebviewResourceUri(webview, avatarResources.avatarUri);
+    const avatarVrmUri = this.toWebviewResourceUri(webview, avatarResources.vrmUri);
+    const avatarConfig = JSON.stringify({
+      enabled: avatarResources.enabled,
+      mode: avatarResources.mode,
+      avatarUri,
+      vrmUri: avatarVrmUri,
+      defaultPresetId: avatarResources.defaultPresetId,
+      presets: avatarResources.presets.map((preset) => ({
+        id: preset.id,
+        label: preset.label,
+        avatarUri: this.toWebviewResourceUri(webview, preset.avatarUri),
+        vrmUri: this.toWebviewResourceUri(webview, preset.vrmUri),
+      })),
+    }).replace(/</g, "\\u003c");
 
     return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -378,11 +419,172 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     <link rel="stylesheet" href="${styleUri}" />
     <title>Code Agent</title>
   </head>
-  <body data-avatar-uri="${avatarUri}" data-session-id="${this.sessionId}">
-    <div id="root"></div>
+  <body
+    data-session-id="${this.sessionId}"
+  >
+    <div id="root">
+      <section style="
+        padding: 12px;
+        color: var(--vscode-descriptionForeground, #8a8a8a);
+        font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+        line-height: 1.5;
+      ">
+        Code Agent 正在初始化...
+      </section>
+    </div>
+    <script id="code-agent-avatar-config" type="application/json">${avatarConfig}</script>
+    <script>
+      globalThis.process = globalThis.process || { env: {} };
+      globalThis.process.env = globalThis.process.env || {};
+      globalThis.process.env.NODE_ENV = globalThis.process.env.NODE_ENV || "production";
+    </script>
     <script src="${scriptUri}"></script>
   </body>
 </html>`;
+  }
+
+  /**
+   * 读取插件配置中的数字人资源，并转换为 Webview 可访问的 URI。
+   */
+  private resolveAvatarResources(_webview: vscode.Webview): AvatarResources {
+    const config = vscode.workspace.getConfiguration("vibeCodingAgent");
+    const enabled = config.get<boolean>("enableAvatar", true);
+    const rawMode = config.get<string>("avatarMode", "vrm");
+    const mode = rawMode === "vrm" || rawMode === "airi-ready"
+      ? rawMode
+      : "prototype";
+    const defaultAvatarUri = vscode.Uri.joinPath(this.extensionUri, "backend", "icon.jpg");
+    const presetCatalogPath = vscode.Uri.joinPath(this.extensionUri, "virtual", "avatar-presets.json");
+    const avatarVrmPath = config.get<string>("avatarVrmPath", "").trim();
+
+    const resources: AvatarResources = {
+      enabled,
+      mode,
+      avatarUri: defaultAvatarUri,
+      defaultPresetId: "",
+      presets: [],
+      localRoots: [],
+    };
+
+    const presetCatalog = this.loadAvatarPresetCatalog(presetCatalogPath.fsPath);
+    for (const item of presetCatalog) {
+      const preset: AvatarPresetResource = {
+        id: item.id,
+        label: item.label,
+        avatarUri: this.resolveAvatarManifestResource(item.avatarUri) ?? defaultAvatarUri,
+        vrmUri: this.resolveAvatarManifestResource(item.vrmUri),
+      };
+
+      resources.presets.push(preset);
+      this.collectAvatarLocalRoot(resources.localRoots, preset.avatarUri);
+      this.collectAvatarLocalRoot(resources.localRoots, preset.vrmUri);
+    }
+
+    if (avatarVrmPath) {
+      const resolvedVrmPath = path.resolve(avatarVrmPath);
+      if (fs.existsSync(resolvedVrmPath) && fs.statSync(resolvedVrmPath).isFile()) {
+        const customVrmUri = vscode.Uri.file(resolvedVrmPath);
+        resources.presets.unshift({
+          id: "custom-local",
+          label: "\u5c0f\u7814",
+          avatarUri: defaultAvatarUri,
+          vrmUri: customVrmUri,
+        });
+        this.collectAvatarLocalRoot(resources.localRoots, customVrmUri);
+      }
+    }
+
+    const primaryPreset = resources.presets[0];
+    resources.defaultPresetId = primaryPreset?.id ?? "default-code-agent";
+    resources.avatarUri = primaryPreset?.avatarUri ?? defaultAvatarUri;
+    resources.vrmUri = primaryPreset?.vrmUri;
+
+    if (!primaryPreset) {
+      resources.presets.push({
+        id: resources.defaultPresetId,
+        label: "\u5c0f\u6f9c",
+        avatarUri: defaultAvatarUri,
+      });
+    }
+
+    return resources;
+  }
+
+  /**
+   * ????? virtual ????????????
+   */
+  private loadAvatarPresetCatalog(filePath: string): AvatarPresetManifestItem[] {
+    if (!fs.existsSync(filePath)) {
+      return [];
+    }
+
+    try {
+      const raw = fs.readFileSync(filePath, "utf8");
+      const parsed = JSON.parse(raw) as Partial<AvatarPresetManifestItem>[];
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .filter((item): item is AvatarPresetManifestItem => Boolean(item?.id && item?.label))
+        .map((item) => ({
+          id: item.id,
+          label: item.label,
+          avatarUri: item.avatarUri?.trim() || undefined,
+          vrmUri: item.vrmUri?.trim() || undefined,
+        }));
+    } catch (error) {
+      console.error("[Code Agent] Failed to load avatar preset catalog.", error);
+      return [];
+    }
+  }
+
+  /**
+   * ????????????????????????
+   */
+  private resolveAvatarManifestResource(resource?: string): vscode.Uri | string | undefined {
+    if (!resource) {
+      return undefined;
+    }
+
+    if (/^https?:\/\//i.test(resource)) {
+      return resource;
+    }
+
+    if (path.isAbsolute(resource)) {
+      return vscode.Uri.file(resource);
+    }
+
+    return vscode.Uri.joinPath(this.extensionUri, "virtual", resource);
+  }
+
+  /**
+   * ?? Webview ??????????????????
+   */
+  private collectAvatarLocalRoot(targetRoots: vscode.Uri[], resource?: vscode.Uri | string): void {
+    if (!(resource instanceof vscode.Uri) || resource.scheme !== "file") {
+      return;
+    }
+
+    const directory = vscode.Uri.file(path.dirname(resource.fsPath));
+    if (!targetRoots.some((root) => root.fsPath === directory.fsPath)) {
+      targetRoots.push(directory);
+    }
+  }
+
+  private toWebviewResourceUri(
+    webview: vscode.Webview,
+    resource?: vscode.Uri | string,
+  ): string {
+    if (!resource) {
+      return "";
+    }
+
+    if (typeof resource === "string") {
+      return resource;
+    }
+
+    return webview.asWebviewUri(resource).toString();
   }
 
   /**

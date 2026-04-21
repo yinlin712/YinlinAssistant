@@ -79,7 +79,6 @@ export function activate(context: vscode.ExtensionContext): void {
   if (context.extensionMode === vscode.ExtensionMode.Development) {
     setTimeout(async () => {
       try {
-        console.log("[Code Agent] Auto-opening sidebar in development mode.");
         await vscode.commands.executeCommand("workbench.view.extension.vibeCodingAgent");
         panelProvider.reveal();
       } catch (error) {
@@ -91,7 +90,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 
 // 函数说明：
-// 当扩展被停用时输出日志，便于调试生命周期。
+// 当扩展被停用时进行清理。
 export function deactivate(): void {
-  console.log("[Code Agent] Extension deactivated.");
+  // 当前版本没有额外的停用清理逻辑。
 }

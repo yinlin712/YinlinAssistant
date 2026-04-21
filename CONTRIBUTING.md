@@ -62,7 +62,7 @@ npm run build
 - `src/`
   - 放 VS Code 插件壳层逻辑，例如命令注册、上下文采集、文件应用
 - `webview-src/`
-  - 放 React Webview 前端界面
+  - 放 Vue Webview 前端界面
 - `docs/`
   - 放架构说明和论文支撑文档
 
@@ -73,7 +73,7 @@ npm run build
 - 变量和函数命名尽量直观，优先让初学者也能读懂
 - 中文注释要解释“为什么这样做”，而不是简单翻译代码
 - Python 是后端首选语言，非必要不要把后端逻辑迁移到 TypeScript
-- Webview UI 优先维护 React 组件，不继续扩展纯手写 DOM 方案
+- Webview UI 优先维护 Vue 组件，不继续扩展纯手写 DOM 方案
 - 涉及文件写回和项目级修改时，请优先保证安全性和可回退性
 
 ## 提交规范

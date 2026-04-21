@@ -20,7 +20,7 @@
     "programming-assistant",
     "ollama",
     "python-backend",
-    "react-webview"
+    "vue-webview"
   ],
   "engines": {
     "vscode": "^1.85.0"
@@ -84,16 +84,22 @@
         "vibeCodingAgent.enableAvatar": {
           "type": "boolean",
           "default": true,
-          "description": "Displays the avatar area in the assistant panel."
+          "description": "Displays the avatar background layer in the assistant panel."
         },
         "vibeCodingAgent.avatarMode": {
           "type": "string",
-          "default": "prototype",
+          "default": "vrm",
           "enum": [
             "prototype",
-            "vrm"
+            "vrm",
+            "airi-ready"
           ],
-          "description": "Avatar rendering mode. Use vrm after integrating a real VRM runtime."
+          "description": "Avatar rendering mode. Use airi-ready to prepare the Webview for future AIRI or VRM integration."
+        },
+        "vibeCodingAgent.avatarVrmPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to a local .vrm model file used by the Webview avatar shell."
         },
         "vibeCodingAgent.localModelEndpoint": {
           "type": "string",
@@ -106,24 +112,27 @@
   "scripts": {
     "build": "npm run build:extension && npm run build:webview",
     "build:extension": "tsc -p ./",
-    "build:webview": "esbuild webview-src/main.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=media/webview.js",
+    "build:webview": "vite build --config webview.vite.config.mts",
     "watch": "npm run watch:extension",
     "watch:extension": "tsc -watch -p ./",
-    "watch:webview": "esbuild webview-src/main.tsx --bundle --format=iife --platform=browser --jsx=automatic --outfile=media/webview.js --watch",
+    "watch:webview": "vite build --watch --config webview.vite.config.mts",
     "package": "vsce package"
   },
   "dependencies": {
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "@pixiv/three-vrm": "^3.5.2",
+    "dompurify": "^3.2.6",
+    "markdown-it": "^14.1.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "three": "^0.184.0",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.184.0",
     "@types/vscode": "^1.85.0",
-    "esbuild": "^0.25.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "typescript": "^5.4.5"
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.4.5",
+    "vite": "^5.4.14",
+    "vue-tsc": "^2.2.0"
   }
 }

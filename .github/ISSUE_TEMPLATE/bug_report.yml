@@ -15,7 +15,7 @@ body:
       description: 请选择最接近的模块
       options:
         - VS Code 插件端
-        - React Webview 前端
+        - Vue Webview 前端
         - Python 后端
         - Ollama / 模型接入
         - 文档或示例

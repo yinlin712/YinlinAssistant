@@ -9,7 +9,7 @@
 ## 影响范围
 
 - [ ] VS Code 插件端
-- [ ] React Webview 前端
+- [ ] Vue Webview 前端
 - [ ] Python 后端
 - [ ] 文档
 - [ ] 工程化配置

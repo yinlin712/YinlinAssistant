@@ -1,0 +1,14 @@
+[
+  {
+    "id": "preset-xiaolan",
+    "label": "\u5c0f\u6f9c",
+    "avatarUri": "",
+    "vrmUri": "https://dist.ayaka.moe/vrm-models/VRoid-Hub/AvatarSample-A/AvatarSample_A.vrm"
+  },
+  {
+    "id": "preset-xiaozhi",
+    "label": "\u5c0f\u6800",
+    "avatarUri": "",
+    "vrmUri": "https://dist.ayaka.moe/vrm-models/VRoid-Hub/AvatarSample-B/AvatarSample_B.vrm"
+  }
+]

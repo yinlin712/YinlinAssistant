@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "module": "ESNext",
+    "target": "ES2020",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "jsx": "preserve",
+    "allowJs": false,
+    "isolatedModules": true,
+    "types": [
+      "vite/client"
+    ],
+    "noEmit": true
+  },
+  "include": [
+    "./**/*.ts",
+    "./**/*.vue",
+    "./**/*.d.ts",
+    "../virtual/**/*.ts"
+  ]
+}

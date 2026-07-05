@@ -1,3 +1,6 @@
+# Example only. The runnable LoRA-ready Modelfile used by model_profiles.json is:
+# models/lora/modelfiles/yinlin-qwen-coding-agent.Modelfile
+
 FROM qwen2.5-coder:7b
 ADAPTER ../adapters/yinlin-qwen-coding-agent
 
@@ -5,7 +8,7 @@ PARAMETER temperature 0
 PARAMETER seed 42
 
 SYSTEM """
-你是 YinlinAssistant 的本地编程模型。
-请优先结合工作区上下文，使用正式、清晰的中文回复。
-在需要生成文件时，返回完整内容，不要省略代码。
+你是 YinlinAssistant 的 LoRA-ready 本地编程模型。
+优先结合工作区上下文，使用正式、清晰的中文回复。
+需要生成文件或修改方案时，说明目标文件、风险和验证命令，不要省略关键代码。
 """

@@ -6,11 +6,13 @@
       "runtime_model": "qwen2.5-coder:7b",
       "fallback_model": "deepseek-r1:7b",
       "base_model": "Qwen2.5-Coder-7B-Instruct",
-      "description": "默认本地编码模型，适合作为当前项目的主力演示模型。",
-      "adapter_path": "models/lora/adapters/qwen-coding-agent",
-      "modelfile_path": "models/lora/modelfiles/qwen-coding-agent.Modelfile",
+      "description": "默认本地编码模型，也作为 LoRA benchmark 的基础模型对照组。",
+      "adapter_path": "",
+      "modelfile_path": "",
       "train_data_dir": "data/lora/train",
-      "eval_data_dir": "data/lora/eval"
+      "eval_data_dir": "data/lora/eval",
+      "benchmark_script": "scripts/run_lora_benchmark.py",
+      "benchmark_eval_file": "data/lora/eval/coding_assistant_eval.jsonl"
     },
     "deepseek_compat": {
       "provider": "ollama",
@@ -18,21 +20,25 @@
       "fallback_model": "qwen2.5-coder:7b",
       "base_model": "DeepSeek-R1-7B",
       "description": "兼容性备用档案，用于本机仅保留 DeepSeek 时的应急切换。",
-      "adapter_path": "models/lora/adapters/deepseek-coding-agent",
-      "modelfile_path": "models/lora/modelfiles/deepseek-coding-agent.Modelfile",
+      "adapter_path": "",
+      "modelfile_path": "",
       "train_data_dir": "data/lora/train",
-      "eval_data_dir": "data/lora/eval"
+      "eval_data_dir": "data/lora/eval",
+      "benchmark_script": "scripts/run_lora_benchmark.py",
+      "benchmark_eval_file": "data/lora/eval/coding_assistant_eval.jsonl"
     },
-    "qwen_lora_placeholder": {
+    "qwen_lora_ready": {
       "provider": "ollama",
       "runtime_model": "yinlin-qwen-coding-agent",
       "fallback_model": "qwen2.5-coder:7b",
       "base_model": "Qwen2.5-Coder-7B-Instruct",
-      "description": "LoRA 微调后模型的预留档案，后续可将 Ollama 模型别名切换到这里。",
+      "description": "面向编程助手任务的 LoRA-ready 档案；通过指定 Modelfile 和 adapter 目录创建 Ollama 别名后，可参与本地 benchmark。",
       "adapter_path": "models/lora/adapters/yinlin-qwen-coding-agent",
       "modelfile_path": "models/lora/modelfiles/yinlin-qwen-coding-agent.Modelfile",
       "train_data_dir": "data/lora/train",
-      "eval_data_dir": "data/lora/eval"
+      "eval_data_dir": "data/lora/eval",
+      "benchmark_script": "scripts/run_lora_benchmark.py",
+      "benchmark_eval_file": "data/lora/eval/coding_assistant_eval.jsonl"
     }
   }
 }

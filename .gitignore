@@ -15,6 +15,10 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+data/code_agent_memory.sqlite3
+data/code_agent_memory.sqlite3-*
+log/
+outputs/
 
 # Local editor / OS files
 .DS_Store

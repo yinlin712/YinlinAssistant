@@ -1,0 +1,14 @@
+# Create from the repository root:
+# ollama create yinlin-qwen-coding-agent -f models/lora/modelfiles/yinlin-qwen-coding-agent.Modelfile
+
+FROM qwen2.5-coder:7b
+ADAPTER ../adapters/yinlin-qwen-coding-agent
+
+PARAMETER temperature 0
+PARAMETER seed 42
+
+SYSTEM """
+你是 YinlinAssistant 的 LoRA-ready 本地编程模型。
+优先服务于 VS Code 编程助手场景：理解工作区上下文、说明涉及文件、生成可确认的修改方案、给出验证命令。
+回答使用清晰、正式的中文；需要修改文件时先说明 diff 风险和确认流程，不要声称已经写回磁盘。
+"""

@@ -1,4 +1,3 @@
-import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import { AgentAction } from "./types";
@@ -82,13 +81,10 @@ export class EditorDiffPreviewService implements vscode.TextDocumentContentProvi
       reveal?: boolean;
     },
   ): Promise<void> {
-    const leftUri = this.resolveOriginalUri(action);
+    const leftUri = this.buildVirtualUri(action, "original");
     const rightUri = this.buildVirtualUri(action, "updated");
 
-    if (leftUri.scheme === EditorDiffPreviewService.scheme) {
-      this.updateVirtualDocument(leftUri, action.originalContent);
-    }
-
+    this.updateVirtualDocument(leftUri, action.originalContent);
     this.updateVirtualDocument(rightUri, action.updatedContent);
 
     if (options.reveal === false) {
@@ -106,20 +102,6 @@ export class EditorDiffPreviewService implements vscode.TextDocumentContentProvi
         preserveFocus: options.preserveFocus,
       },
     );
-  }
-
-  /**
-   * 为 diff 左侧优先返回真实文件 URI；如果文件尚不存在，则退回到虚拟文档。
-   */
-  private resolveOriginalUri(action: AgentAction): vscode.Uri {
-    const targetUri = vscode.Uri.file(action.targetFile);
-    const fileExists = fs.existsSync(action.targetFile);
-
-    if (action.kind !== "create_file" && fileExists) {
-      return targetUri;
-    }
-
-    return this.buildVirtualUri(action, "original");
   }
 
   /**

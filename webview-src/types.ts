@@ -1,18 +1,17 @@
-// 文件说明：
-// 本文件定义 Vue Webview 与插件端通信所需的消息和展示类型。
-
 export type ChatRole = "user" | "agent" | "system";
 export type AvatarMode = "prototype" | "vrm" | "airi-ready";
 
-// 类型说明：
-// 表示对话区中的一条消息。
+/**
+ * 表示聊天区中的一条消息。
+ */
 export interface ChatMessage {
   role: ChatRole;
   content: string;
 }
 
-// 类型说明：
-// 表示流式对话片段消息。
+/**
+ * 表示流式输出中的增量片段。
+ */
 export interface MessageChunkPayload {
   role: Extract<ChatRole, "agent">;
   chunk: string;
@@ -20,8 +19,9 @@ export interface MessageChunkPayload {
 
 export type ActionKind = "create_file" | "update_file" | "update_documentation";
 
-// 类型说明：
-// 表示待确认方案中单个文件动作的预览信息。
+/**
+ * 表示待确认方案中的单个文件预览项。
+ */
 export interface ProposalActionPreview {
   kind: ActionKind;
   targetFile: string;
@@ -29,8 +29,9 @@ export interface ProposalActionPreview {
   diffText: string;
 }
 
-// 类型说明：
-// 表示整个待确认方案的展示数据。
+/**
+ * 表示待确认的修改方案。
+ */
 export interface PendingProposalPayload {
   title: string;
   summary: string;
@@ -38,8 +39,9 @@ export interface PendingProposalPayload {
   isStreaming: boolean;
 }
 
-// 类型说明：
-// 表示首次加载 Webview 时所需的完整初始化数据。
+/**
+ * Webview 首次加载时的初始化数据。
+ */
 export interface HydratePayload {
   sessionId: string;
   messages: ChatMessage[];
@@ -52,8 +54,9 @@ export interface HydratePayload {
   pendingProposal: PendingProposalPayload | null;
 }
 
-// 类型说明：
-// 表示状态栏刷新消息的载荷。
+/**
+ * 顶部状态条刷新载荷。
+ */
 export interface StatusPayload {
   status: string;
   provider: string;
@@ -61,13 +64,9 @@ export interface StatusPayload {
   noActiveFile: string;
 }
 
-// 类型说明：
-// 约束插件端下发给 Webview 的消息格式。
-export interface WebviewIncomingMessage {
-  type: "hydrate" | "message" | "messageChunk" | "status" | "proposal" | "clearProposal";
-  payload: unknown;
-}
-
+/**
+ * 数字人配置。
+ */
 export interface AvatarConfig {
   enabled: boolean;
   mode: AvatarMode;
@@ -84,11 +83,57 @@ export interface AvatarPresetConfig {
   vrmUri?: string;
 }
 
+/**
+ * 界面透明度偏好。
+ */
 export interface VisualPreferences {
   backgroundOpacity: number;
   chatOpacity: number;
 }
 
+/**
+ * 语音交互配置，遵循 AIRI 兼容的转写接口思路。
+ */
+export interface VoiceInteractionConfig {
+  enabled: boolean;
+  baseUrl: string;
+  apiKey?: string;
+  model: string;
+  language?: string;
+  autoSubmit: boolean;
+  autoSpeakReplies: boolean;
+}
+
+/**
+ * 插件端返回的语音识别结果。
+ */
+export interface VoiceTranscriptPayload {
+  text: string;
+  autoSubmit: boolean;
+  autoSpeakReplies: boolean;
+}
+
+/**
+ * 插件端返回的实时语音转写片段。
+ */
+export interface VoiceInterimTranscriptPayload {
+  sessionId: string;
+  requestId: number;
+  text: string;
+}
+
+/**
+ * 语音处理状态载荷。
+ */
+export interface VoiceStatusPayload {
+  phase: "listening" | "transcribing" | "ready" | "error";
+  text: string;
+  sessionId?: string;
+}
+
+/**
+ * Webview 持久化缓存结构。
+ */
 export interface PersistedWebviewState {
   sessionId: string;
   messages: ChatMessage[];
@@ -99,4 +144,22 @@ export interface PersistedWebviewState {
   proposal: PendingProposalPayload | null;
   streamingAgentContent: string;
   visualPreferences: VisualPreferences;
+}
+
+/**
+ * 插件端下发给 Webview 的消息类型。
+ */
+export interface WebviewIncomingMessage {
+  type:
+    | "hydrate"
+    | "message"
+    | "messageChunk"
+    | "status"
+    | "proposal"
+    | "clearProposal"
+    | "voiceStatus"
+    | "voiceTranscript"
+    | "voiceInterimTranscript"
+    | "voiceError";
+  payload: unknown;
 }

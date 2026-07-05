@@ -12,6 +12,8 @@ import {
   AgentStreamHandlers,
   ConversationTurn,
   ModelProvider,
+  TestAnalysisResult,
+  TestExecutionResult,
 } from "./types";
 
 // 文件说明：
@@ -90,6 +92,26 @@ export class CodingAgent {
     return {
       context,
       appliedActions,
+    };
+  }
+
+  public async analyzeTestReport(
+    prompt: string,
+    context: AgentContext,
+    modifiedFiles: string[],
+    executions: TestExecutionResult[],
+  ): Promise<TestAnalysisResult> {
+    const provider = this.resolveProvider();
+    if (provider.analyzeTestReport) {
+      return provider.analyzeTestReport(prompt, context, modifiedFiles, executions);
+    }
+
+    const passed = executions.filter((item) => item.passed).length;
+    const failed = executions.length - passed;
+    return {
+      content: `当前提供者不支持测试结果智能解释。已执行 ${executions.length} 条命令，${passed} 条通过，${failed} 条失败。`,
+      summary: `已执行 ${executions.length} 条命令。`,
+      overallStatus: failed > 0 ? "failed" : executions.length > 0 ? "passed" : "unknown",
     };
   }
 

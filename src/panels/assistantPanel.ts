@@ -4,6 +4,9 @@ import * as vscode from "vscode";
 import { CodingAgent } from "../core/agent";
 import { buildActionPreviewItems } from "../core/diffPreview";
 import { EditorDiffPreviewService } from "../core/editorDiffPreview";
+import { CodeAgentTestRunner } from "../core/testRunner";
+import { LocalVoiceBridgeClient } from "../core/voiceBridgeClient";
+import { VoiceTranscriptionConfig } from "../core/voiceTranscription";
 import {
   ActionExecutionProgress,
   ActionPreviewItem,
@@ -11,7 +14,9 @@ import {
   AgentContext,
   AppliedAgentAction,
   ChatMessage,
+  ContextSelection,
   ConversationTurn,
+  TestPlan,
 } from "../core/types";
 
 /**
@@ -37,6 +42,10 @@ const PANEL_TEXT = {
   streamingSummary: "模型正在生成当前文件的修改内容。",
   streamingPlanSummary: "正在生成当前文件的修改方案。",
   streamingApplyBlocked: "当前 patch 仍在生成中，请等待完整结果返回后再应用。",
+  testing: "正在执行自动测试",
+  analyzingTests: "正在解释测试结果",
+  noTests: "当前未检测到可执行的自动测试或验证命令。",
+  testPlanPrefix: "自动测试计划",
 };
 
 interface PendingProposal {
@@ -45,6 +54,8 @@ interface PendingProposal {
   previews: ActionPreviewItem[];
   context: AgentContext;
   isStreaming: boolean;
+  prompt: string;
+  testPlan?: TestPlan;
 }
 
 interface AvatarResources {
@@ -71,6 +82,11 @@ interface AvatarPresetManifestItem {
   vrmUri?: string;
 }
 
+interface VoiceInteractionConfig extends VoiceTranscriptionConfig {
+  autoSubmit: boolean;
+  autoSpeakReplies: boolean;
+}
+
 /**
  * 统一管理 Webview 生命周期、消息分发和待确认方案状态。
  */
@@ -79,6 +95,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private readonly agent = new CodingAgent();
+  private readonly testRunner = new CodeAgentTestRunner();
+  private readonly voiceBridgeClient = new LocalVoiceBridgeClient();
   private readonly sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   private readonly messages: ChatMessage[] = [
     {
@@ -88,6 +106,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
   ];
 
   private pendingProposal?: PendingProposal;
+  private voiceBridgeSessionId?: string;
+  private voiceBridgePollingTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -100,6 +120,7 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
     const avatarResources = this.resolveAvatarResources(webviewView.webview);
+    const voiceConfig = this.resolveVoiceInteractionConfig();
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [
@@ -109,7 +130,7 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
       ],
     };
 
-    webviewView.webview.html = this.getHtml(webviewView.webview, avatarResources);
+    webviewView.webview.html = this.getHtml(webviewView.webview, avatarResources, voiceConfig);
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
       if (message.type === "submitPrompt") {
@@ -123,9 +144,23 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
       if (message.type === "discardPendingActions") {
         this.clearPendingProposal();
       }
+
+      if (message.type === "startVoiceBridgeRecording") {
+        await this.startVoiceBridgeRecording(voiceConfig);
+      }
+
+      if (message.type === "stopVoiceBridgeRecording") {
+        await this.stopVoiceBridgeRecording(voiceConfig);
+      }
+
     });
 
     this.postHydrate();
+
+    webviewView.onDidDispose(() => {
+      this.stopVoiceBridgePolling();
+      this.voiceBridgeSessionId = undefined;
+    });
   }
 
   /**
@@ -181,8 +216,10 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
       role: "agent",
       content: result.response.content,
     });
+    this.postContextSelectionSummary(result.response.contextSelection);
 
     const hasExecutableActions = result.response.actions.length > 0;
+    const shouldAutoApply = result.response.autoApplyActions && !result.response.requiresConfirmation;
     const shouldShowProposal = hasExecutableActions
       && (result.response.requiresConfirmation || result.response.autoApplyActions);
 
@@ -196,6 +233,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
         previews,
         context: result.context,
         isStreaming: false,
+        prompt,
+        testPlan: result.response.testPlan,
       };
 
       this.postMessage("proposal", {
@@ -210,17 +249,9 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
       this.clearPendingProposal();
     }
 
-    if (result.response.autoApplyActions && hasExecutableActions) {
-      const choice = await vscode.window.showInformationMessage(
-        PANEL_TEXT.directApplyPrompt,
-        PANEL_TEXT.directApplyNow,
-        PANEL_TEXT.previewOnly,
-      );
-
-      if (choice === PANEL_TEXT.directApplyNow) {
-        await this.applyPendingActions();
-        return;
-      }
+    if (shouldAutoApply && hasExecutableActions) {
+      await this.applyPendingActions();
+      return;
     }
 
     this.postStatus(this.moodToStatus(result.response.mood), result.provider, result.context.activeFile);
@@ -240,10 +271,11 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     }
 
     this.postStatus(PANEL_TEXT.applying);
+    const proposal = this.pendingProposal;
 
     const result = await this.agent.applyProposedActions(
-      this.pendingProposal.actions,
-      this.pendingProposal.context,
+      proposal.actions,
+      proposal.context,
       {
         onProgress: (progress) => this.handleApplyProgress(progress),
       },
@@ -262,7 +294,165 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     }
 
     this.clearPendingProposal();
+
+    const modifiedFiles = result.appliedActions
+      .filter((action) => action.status === "applied")
+      .map((action) => action.targetFile);
+
+    if (modifiedFiles.length > 0) {
+      await this.runPostApplyTests(
+        proposal.prompt,
+        proposal.testPlan,
+        result.context,
+        modifiedFiles,
+      );
+    }
+
     this.postStatus(PANEL_TEXT.responded, undefined, result.context.activeFile);
+  }
+
+  /**
+   * 启动本地 Python 录音桥接，并开始轮询实时转写结果。
+   */
+  private async startVoiceBridgeRecording(voiceConfig: VoiceInteractionConfig): Promise<void> {
+    if (!voiceConfig.enabled) {
+      this.postMessage("voiceError", {
+        message: "当前未启用语音交互。",
+      });
+      return;
+    }
+
+    this.stopVoiceBridgePolling();
+    this.voiceBridgeSessionId = undefined;
+    this.postMessage("voiceStatus", {
+      phase: "transcribing",
+      text: "正在准备语音输入...",
+    });
+
+    try {
+      const response = await this.voiceBridgeClient.startRecording({
+        baseUrl: voiceConfig.baseUrl,
+        apiKey: voiceConfig.apiKey,
+        model: voiceConfig.model,
+        language: voiceConfig.language,
+      });
+
+      if (response.status === "error" || !response.sessionId) {
+        throw new Error(response.message || "本地录音桥接未返回有效会话。");
+      }
+
+      this.voiceBridgeSessionId = response.sessionId;
+      await this.persistVoiceInteractionEnabled();
+      this.postMessage("voiceStatus", {
+        phase: "listening",
+        text: response.message || "正在录音，实时转写中...",
+        sessionId: response.sessionId,
+      });
+
+      this.startVoiceBridgePolling(response.sessionId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.looksLikeMicrophonePermissionIssue(message)) {
+        void this.promptOpenMicrophoneSettings(message);
+      }
+      this.postMessage("voiceError", {
+        message: `无法启动本地录音桥接：${message}`,
+      });
+    }
+  }
+
+  /**
+   * 结束本地录音桥接，并将最终转写结果回推给前端。
+   */
+  private async stopVoiceBridgeRecording(voiceConfig: VoiceInteractionConfig): Promise<void> {
+    const sessionId = this.voiceBridgeSessionId;
+    if (!sessionId) {
+      this.postMessage("voiceError", {
+        message: "当前没有可结束的录音会话，请重新点击麦克风开始录音。",
+      });
+      return;
+    }
+
+    this.stopVoiceBridgePolling();
+    this.postMessage("voiceStatus", {
+      phase: "transcribing",
+      text: "正在整理语音内容...",
+      sessionId,
+    });
+
+    try {
+      const response = await this.voiceBridgeClient.stopRecording(sessionId);
+      this.voiceBridgeSessionId = undefined;
+
+      if (response.status === "error") {
+        throw new Error(response.message || "本地录音桥接结束失败。");
+      }
+
+      if (!response.text.trim()) {
+        this.postMessage("voiceError", {
+          message: "未识别到有效语音内容，请再试一次。",
+        });
+        return;
+      }
+
+      this.postMessage("voiceTranscript", {
+        text: response.text,
+        autoSubmit: voiceConfig.autoSubmit,
+        autoSpeakReplies: voiceConfig.autoSpeakReplies,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.postMessage("voiceError", {
+        message: `语音识别失败：${message}`,
+      });
+    }
+  }
+
+  /**
+   * 轮询本地录音桥接的中间转写结果，用于“边说边显示”。
+   */
+  private startVoiceBridgePolling(sessionId: string): void {
+    this.stopVoiceBridgePolling();
+    let requestId = 0;
+
+    this.voiceBridgePollingTimer = setInterval(() => {
+      requestId += 1;
+      void this.pollVoiceBridgeInterim(sessionId, requestId);
+    }, 1500);
+  }
+
+  /**
+   * 停止当前录音会话的实时轮询。
+   */
+  private stopVoiceBridgePolling(): void {
+    if (this.voiceBridgePollingTimer) {
+      clearInterval(this.voiceBridgePollingTimer);
+      this.voiceBridgePollingTimer = undefined;
+    }
+  }
+
+  /**
+   * 从本地录音桥接拉取最近一次实时转写结果。
+   */
+  private async pollVoiceBridgeInterim(sessionId: string, requestId: number): Promise<void> {
+    if (!this.voiceBridgeSessionId || this.voiceBridgeSessionId !== sessionId) {
+      return;
+    }
+
+    try {
+      const response = await this.voiceBridgeClient.getInterimTranscript(sessionId);
+      if (response.status === "error") {
+        return;
+      }
+
+      this.postMessage("voiceInterimTranscript", {
+        sessionId,
+        requestId,
+        text: response.text,
+      });
+    } catch {
+      // 实时中间转写失败时保持静默，避免打断正在进行的录音会话。
+    }
   }
 
   /**
@@ -340,6 +530,40 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * 将 Embedding + 注意力重排结果以轻量系统消息展示出来，便于用户和答辩时观察上下文选择过程。
+   */
+  private postContextSelectionSummary(selection?: ContextSelection): void {
+    if (!selection?.available || selection.matches.length === 0) {
+      return;
+    }
+
+    const provider = selection.embeddingModel || selection.embeddingProvider || "unknown";
+    const topMatches = selection.matches.slice(0, 3);
+    const matchText = topMatches
+      .map((match) => `${match.title}(${match.weight.toFixed(3)})`)
+      .join("、");
+    const fallbackText = selection.fallbackUsed
+      ? `\nEmbedding 回退：${selection.warning || "已使用本地哈希向量"}`
+      : "";
+
+    const content = [
+      "上下文选择诊断",
+      `Embedding：${provider}；注意力头数：${selection.headCount || topMatches[0]?.headWeights.length || 0}`,
+      selection.summary || `注意力 Top 上下文：${matchText}`,
+      `Top 权重：${matchText}`,
+    ].join("\n") + fallbackText;
+
+    this.messages.push({
+      role: "system",
+      content,
+    });
+    this.postMessage("message", {
+      role: "system",
+      content,
+    });
+  }
+
+  /**
    * 将最近几轮用户与助手消息整理为后端可消费的对话上下文。
    */
   private buildConversationHistory(): ConversationTurn[] {
@@ -377,6 +601,8 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
       previews,
       context,
       isStreaming: true,
+      prompt: "",
+      testPlan: undefined,
     };
 
     this.postMessage("proposal", {
@@ -392,7 +618,11 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
   /**
    * 生成 Webview 页面所需的 HTML 外壳，并注入脚本、样式和头像资源。
    */
-  private getHtml(webview: vscode.Webview, avatarResources: AvatarResources): string {
+  private getHtml(
+    webview: vscode.Webview,
+    avatarResources: AvatarResources,
+    voiceConfig: VoiceInteractionConfig,
+  ): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "webview.js"));
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "styles.css"));
     const avatarUri = this.toWebviewResourceUri(webview, avatarResources.avatarUri);
@@ -410,6 +640,7 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
         vrmUri: this.toWebviewResourceUri(webview, preset.vrmUri),
       })),
     }).replace(/</g, "\\u003c");
+    const serializedVoiceConfig = JSON.stringify(voiceConfig).replace(/</g, "\\u003c");
 
     return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -433,6 +664,7 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
       </section>
     </div>
     <script id="code-agent-avatar-config" type="application/json">${avatarConfig}</script>
+    <script id="code-agent-voice-config" type="application/json">${serializedVoiceConfig}</script>
     <script>
       globalThis.process = globalThis.process || { env: {} };
       globalThis.process.env = globalThis.process.env || {};
@@ -508,6 +740,61 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
     }
 
     return resources;
+  }
+
+  /**
+   * 读取语音交互配置，并转换为 Webview 与插件端都可消费的统一结构。
+   */
+  private resolveVoiceInteractionConfig(): VoiceInteractionConfig {
+    const config = vscode.workspace.getConfiguration("vibeCodingAgent");
+
+    return {
+      enabled: config.get<boolean>("enableVoiceInteraction", true),
+      baseUrl: config.get<string>("voiceApiBaseUrl", "http://127.0.0.1:3000").trim(),
+      apiKey: config.get<string>("voiceApiKey", "").trim() || undefined,
+      model: config.get<string>("voiceTranscriptionModel", "whisper-1").trim() || "whisper-1",
+      language: config.get<string>("voiceLanguage", "zh").trim() || undefined,
+      autoSubmit: true,
+      autoSpeakReplies: true,
+    };
+  }
+
+  /**
+   * 在用户首次允许麦克风后，将语音交互显式写入用户配置。
+   * 这不会越过系统授权边界，但可以保证插件后续默认保持语音功能开启。
+   */
+  private async persistVoiceInteractionEnabled(): Promise<void> {
+    const config = vscode.workspace.getConfiguration("vibeCodingAgent");
+    await config.update(
+      "enableVoiceInteraction",
+      true,
+      vscode.ConfigurationTarget.Global,
+    );
+  }
+
+  /**
+   * 当 Webview 无法访问麦克风时，引导用户直接打开系统麦克风设置。
+   */
+  private async promptOpenMicrophoneSettings(reason: string): Promise<void> {
+    const action = "打开系统麦克风设置";
+    const selection = await vscode.window.showErrorMessage(
+      reason || "无法访问麦克风，请检查系统权限设置。",
+      action,
+    );
+
+    if (selection === action) {
+      await vscode.env.openExternal(vscode.Uri.parse("ms-settings:privacy-microphone"));
+    }
+  }
+
+  /**
+   * 粗略判断当前失败是否与系统麦克风授权有关。
+   */
+  private looksLikeMicrophonePermissionIssue(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes("麦克风")
+      || normalized.includes("permission")
+      || normalized.includes("denied");
   }
 
   /**
@@ -622,6 +909,67 @@ export class AssistantPanelProvider implements vscode.WebviewViewProvider {
   /**
    * 在存在工作区根目录时，将绝对路径转换为相对路径以便阅读。
    */
+  private async runPostApplyTests(
+    prompt: string,
+    testPlan: TestPlan | undefined,
+    context: AgentContext,
+    modifiedFiles: string[],
+  ): Promise<void> {
+    if (!testPlan?.available || testPlan.commands.length === 0) {
+      const message = testPlan?.summary || PANEL_TEXT.noTests;
+      this.messages.push({
+        role: "system",
+        content: `${PANEL_TEXT.testPlanPrefix}\n${message}`,
+      });
+      this.postMessage("message", {
+        role: "system",
+        content: `${PANEL_TEXT.testPlanPrefix}\n${message}`,
+      });
+      return;
+    }
+
+    this.postStatus(PANEL_TEXT.testing);
+    this.postMessage("message", {
+      role: "system",
+      content: `${PANEL_TEXT.testPlanPrefix}\n${testPlan.summary}`,
+    });
+
+    const executions = await this.testRunner.run(testPlan, context);
+    for (const execution of executions) {
+      const commandMessage = [
+        `测试命令：${execution.command}`,
+        `结果：${execution.passed ? "通过" : "失败"}`,
+        `耗时：${execution.durationMs} ms`,
+      ].join("\n");
+
+      this.messages.push({
+        role: "system",
+        content: commandMessage,
+      });
+      this.postMessage("message", {
+        role: "system",
+        content: commandMessage,
+      });
+    }
+
+    this.postStatus(PANEL_TEXT.analyzingTests);
+    const analysis = await this.agent.analyzeTestReport(
+      prompt,
+      context,
+      modifiedFiles,
+      executions,
+    );
+
+    this.messages.push({
+      role: "agent",
+      content: analysis.content,
+    });
+    this.postMessage("message", {
+      role: "agent",
+      content: analysis.content,
+    });
+  }
+
   private toShortPath(filePath: string): string {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {

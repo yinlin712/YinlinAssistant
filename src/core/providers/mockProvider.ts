@@ -1,4 +1,4 @@
-import { AgentContext, AgentResponse, ConversationTurn, ModelProvider } from "../types";
+import { AgentContext, AgentResponse, ConversationTurn, ModelProvider, TestAnalysisResult, TestExecutionResult } from "../types";
 
 // 文件说明：
 // 本文件定义用于界面联调的 Mock 提供者。
@@ -46,6 +46,23 @@ export class MockModelProvider implements ModelProvider {
       requiresConfirmation: false,
       autoApplyActions: false,
       proposalSummary: "",
+    };
+  }
+
+  public async analyzeTestReport(
+    _prompt: string,
+    _context: AgentContext,
+    _modifiedFiles: string[],
+    executions: TestExecutionResult[],
+  ): Promise<TestAnalysisResult> {
+    const passed = executions.filter((item) => item.passed).length;
+    const failed = executions.length - passed;
+    const overallStatus = failed > 0 ? "failed" : executions.length > 0 ? "passed" : "unknown";
+
+    return {
+      content: `Mock 测试分析：共执行 ${executions.length} 条命令，${passed} 条通过，${failed} 条失败。`,
+      summary: `Mock 测试分析：${passed} 条通过，${failed} 条失败。`,
+      overallStatus,
     };
   }
 }

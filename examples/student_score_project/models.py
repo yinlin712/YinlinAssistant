@@ -1,10 +1,3 @@
-"""
-数据模型定义。
-
-本文件定义学生成绩对象，并提供基础的数据转换能力。
-当前同时保留了属性和方法两种平均分入口，便于后续演示统一接口的重构需求。
-"""
-
 from dataclasses import dataclass
 
 
@@ -59,3 +52,12 @@ class StudentRecord:
             english=int(raw_data.get("english", 0)),
             python=int(python_score),
         )
+
+    def __post_init__(self):
+        """
+        初始化后处理，确保所有成绩在有效范围内。
+        """
+
+        for subject in ["math", "english", "python"]:
+            if not (0 <= getattr(self, subject) <= 100):
+                setattr(self, subject, 0)

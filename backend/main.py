@@ -1,8 +1,17 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse
 
-from backend.models import GenerateRequest, GenerateResponse
+from backend.models import (
+    GenerateRequest,
+    GenerateResponse,
+    TestAnalysisRequest,
+    TestAnalysisResponse,
+    VoiceBridgeStartRequest,
+    VoiceBridgeStartResponse,
+    VoiceBridgeTranscriptResponse,
+)
 from backend.service import CodingAgentService
+from backend.voice_bridge import VoiceBridgeError
 
 # 文件说明：
 # 本文件是 Python 后端的 HTTP 入口。
@@ -46,3 +55,93 @@ def stream_generate(request: GenerateRequest) -> StreamingResponse:
         service.stream_generate(request),
         media_type="application/x-ndjson",
     )
+
+
+@app.post("/analyze-test-report", response_model=TestAnalysisResponse)
+def analyze_test_report(request: TestAnalysisRequest) -> TestAnalysisResponse:
+    return service.analyze_test_report(request)
+
+
+@app.get("/memory")
+def inspect_memory(
+    workspaceRoot: str = Query(default="", description="Optional workspace root used to filter memory rows."),
+    limit: int = Query(default=20, ge=1, le=100, description="Maximum rows per memory section."),
+) -> dict[str, object]:
+    """
+    查看 SQLite 历史对话、长期记忆和上下文选择事件。
+    """
+
+    return service.inspect_memory(workspaceRoot, limit)
+
+
+@app.delete("/memory")
+def clear_memory(
+    workspaceRoot: str = Query(default="", description="Optional workspace root used to clear only one workspace."),
+) -> dict[str, object]:
+    """
+    清空 SQLite 记忆库；传入 workspaceRoot 时只清空对应工作区。
+    """
+
+    return service.clear_memory(workspaceRoot)
+
+
+@app.post("/voice-bridge/start", response_model=VoiceBridgeStartResponse)
+def start_voice_bridge(request: VoiceBridgeStartRequest) -> VoiceBridgeStartResponse:
+    try:
+        session_id, message = service.start_voice_bridge_session(
+            base_url=request.baseUrl,
+            api_key=request.apiKey,
+            model=request.model,
+            language=request.language,
+            sample_rate=request.sampleRate,
+            channels=request.channels,
+        )
+        return VoiceBridgeStartResponse(
+            sessionId=session_id,
+            status="listening",
+            message=message,
+        )
+    except VoiceBridgeError as exc:
+        return VoiceBridgeStartResponse(
+            sessionId="",
+            status="error",
+            message=str(exc),
+        )
+
+
+@app.get("/voice-bridge/{session_id}/interim", response_model=VoiceBridgeTranscriptResponse)
+def get_voice_bridge_interim(session_id: str) -> VoiceBridgeTranscriptResponse:
+    try:
+        transcript = service.get_voice_bridge_interim_transcript(session_id)
+        return VoiceBridgeTranscriptResponse(
+            sessionId=session_id,
+            status="listening",
+            text=transcript,
+            message="正在通过本地 Python 录音桥接进行实时转写。",
+        )
+    except VoiceBridgeError as exc:
+        return VoiceBridgeTranscriptResponse(
+            sessionId=session_id,
+            status="error",
+            text="",
+            message=str(exc),
+        )
+
+
+@app.post("/voice-bridge/{session_id}/stop", response_model=VoiceBridgeTranscriptResponse)
+def stop_voice_bridge(session_id: str) -> VoiceBridgeTranscriptResponse:
+    try:
+        transcript = service.stop_voice_bridge_session(session_id)
+        return VoiceBridgeTranscriptResponse(
+            sessionId=session_id,
+            status="ready",
+            text=transcript,
+            message="本地录音桥接已结束，最终转写结果已返回。",
+        )
+    except VoiceBridgeError as exc:
+        return VoiceBridgeTranscriptResponse(
+            sessionId=session_id,
+            status="error",
+            text="",
+            message=str(exc),
+        )

@@ -57,6 +57,29 @@ PROJECT_SCOPE_KEYWORDS = {
     "across files",
 }
 
+DOMAIN_PATH_HINTS = {
+    ("json", "读取", "加载", "读入", "存储", "保存", "写回", "文件"): {
+        "storage": 34,
+        "models": 18,
+        "model": 18,
+        "data": 10,
+    },
+    ("字典", "序列化", "转换", "对象", "校验", "范围"): {
+        "models": 34,
+        "model": 34,
+        "record": 22,
+    },
+    ("报表", "报告", "输出", "格式化"): {
+        "report": 34,
+        "manager": 18,
+    },
+    ("平均分", "统计", "计算"): {
+        "manager": 28,
+        "models": 22,
+        "model": 22,
+    },
+}
+
 
 @dataclass
 class WorkspaceFileSnapshot:
@@ -300,6 +323,15 @@ class WorkspaceSearchTool:
             if file_name in {"package.json", "requirements.txt", "environment.yml", "model_profiles.json"}:
                 score += 24
                 reasons.append("与项目配置相关")
+
+        for keywords, path_hints in DOMAIN_PATH_HINTS.items():
+            if not any(keyword in prompt_lower for keyword in keywords):
+                continue
+            for path_hint, bonus in path_hints.items():
+                if path_hint in relative_path or path_hint in file_name:
+                    score += bonus
+                    reasons.append(f"领域路径提示 {path_hint}")
+                    break
 
         if project_scope and path.suffix.lower() in {".py", ".ts", ".tsx", ".js", ".md", ".json"}:
             score += 6

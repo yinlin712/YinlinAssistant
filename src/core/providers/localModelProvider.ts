@@ -1,9 +1,17 @@
 import * as vscode from "vscode";
-import { AgentAction, AgentContext, AgentResponse, AgentStreamHandlers, ConversationTurn, ModelProvider } from "../types";
-
-// 文件说明：
-// 本文件定义本地 Python 后端提供者。
-// 插件端通过它把请求发送给 FastAPI 后端，而不是直接调用 Ollama。
+import {
+  AgentAction,
+  AgentContext,
+  AgentResponse,
+  AgentStreamHandlers,
+  ContextSelection,
+  ConversationTurn,
+  ModelProvider,
+  RiskOverview,
+  TestAnalysisResult,
+  TestExecutionResult,
+  TestPlan,
+} from "../types";
 
 type PythonAgentPayload = {
   content?: string;
@@ -12,23 +20,29 @@ type PythonAgentPayload = {
   requiresConfirmation?: boolean;
   autoApplyActions?: boolean;
   proposalSummary?: string;
+  riskOverview?: RiskOverview;
+  testPlan?: TestPlan;
+  contextSelection?: ContextSelection;
 };
 
+type TestAnalysisPayload = {
+  content?: string;
+  summary?: string;
+  overallStatus?: TestAnalysisResult["overallStatus"];
+};
 
-// 类说明：
-// 负责通过 HTTP 调用本地 Python Agent 服务。
+// 文件说明：
+// 本文件定义本地 Python 后端提供者。
+// 插件端通过它把请求发送给 FastAPI 后端，而不是直接调用 Ollama。
 export class LocalModelProvider implements ModelProvider {
   public readonly name = "python-agent";
 
-  // 方法说明：
-  // 向后端发送请求，并将返回值转换为插件端统一响应结构。
   public async generate(
     prompt: string,
     context: AgentContext,
     conversationHistory: ConversationTurn[] = [],
   ): Promise<AgentResponse> {
-    const config = vscode.workspace.getConfiguration("vibeCodingAgent");
-    const endpoint = config.get<string>("localModelEndpoint", "http://127.0.0.1:8000/generate");
+    const endpoint = this.resolveGenerateEndpoint();
 
     try {
       const response = await fetch(endpoint, {
@@ -48,15 +62,7 @@ export class LocalModelProvider implements ModelProvider {
       }
 
       const payload = await response.json() as PythonAgentPayload;
-      return {
-        content: payload.content ?? "Python 后端返回了空响应。",
-        mood: payload.mood ?? "helpful",
-        actions: payload.actions ?? [],
-        appliedActions: [],
-        requiresConfirmation: payload.requiresConfirmation ?? false,
-        autoApplyActions: payload.autoApplyActions ?? false,
-        proposalSummary: payload.proposalSummary ?? "",
-      };
+      return this.toAgentResponse(payload);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
@@ -76,19 +82,13 @@ export class LocalModelProvider implements ModelProvider {
     }
   }
 
-  // 方法说明：
-  // 通过流式接口接收实时 patch 预览与最终响应结果。
   public async streamGenerate(
     prompt: string,
     context: AgentContext,
     conversationHistory: ConversationTurn[],
     handlers: AgentStreamHandlers,
   ): Promise<AgentResponse> {
-    const config = vscode.workspace.getConfiguration("vibeCodingAgent");
-    const endpoint = config.get<string>("localModelEndpoint", "http://127.0.0.1:8000/generate");
-    const streamEndpoint = endpoint.endsWith("/generate")
-      ? `${endpoint.slice(0, -"/generate".length)}/stream-generate`
-      : `${endpoint}/stream`;
+    const streamEndpoint = this.resolveStreamEndpoint();
 
     try {
       const response = await fetch(streamEndpoint, {
@@ -149,16 +149,7 @@ export class LocalModelProvider implements ModelProvider {
           }
 
           if (event.type === "result") {
-            const payload = event.payload as PythonAgentPayload | undefined;
-            finalResponse = {
-              content: payload?.content ?? "Python 后端返回了空响应。",
-              mood: payload?.mood ?? "helpful",
-              actions: payload?.actions ?? [],
-              appliedActions: [],
-              requiresConfirmation: payload?.requiresConfirmation ?? false,
-              autoApplyActions: payload?.autoApplyActions ?? false,
-              proposalSummary: payload?.proposalSummary ?? "",
-            };
+            finalResponse = this.toAgentResponse(event.payload as PythonAgentPayload | undefined);
           }
         }
       }
@@ -169,16 +160,7 @@ export class LocalModelProvider implements ModelProvider {
           payload?: Record<string, unknown>;
         };
         if (event.type === "result") {
-          const payload = event.payload as PythonAgentPayload | undefined;
-          finalResponse = {
-            content: payload?.content ?? "Python 后端返回了空响应。",
-            mood: payload?.mood ?? "helpful",
-            actions: payload?.actions ?? [],
-            appliedActions: [],
-            requiresConfirmation: payload?.requiresConfirmation ?? false,
-            autoApplyActions: payload?.autoApplyActions ?? false,
-            proposalSummary: payload?.proposalSummary ?? "",
-          };
+          finalResponse = this.toAgentResponse(event.payload as PythonAgentPayload | undefined);
         }
       }
 
@@ -186,5 +168,90 @@ export class LocalModelProvider implements ModelProvider {
     } catch {
       return await this.generate(prompt, context, conversationHistory);
     }
+  }
+
+  public async analyzeTestReport(
+    prompt: string,
+    context: AgentContext,
+    modifiedFiles: string[],
+    executions: TestExecutionResult[],
+  ): Promise<TestAnalysisResult> {
+    const endpoint = this.resolveTestAnalysisEndpoint();
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt,
+          context,
+          modifiedFiles,
+          executions: executions.map((item) => ({
+            command: item.command,
+            purpose: item.purpose,
+            kind: item.kind,
+            confidence: item.confidence,
+            exitCode: item.exitCode,
+            durationMs: item.durationMs,
+            stdout: item.stdout,
+            stderr: item.stderr,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = await response.json() as TestAnalysisPayload;
+      return {
+        content: payload.content ?? "测试结果分析接口返回了空内容。",
+        summary: payload.summary ?? "",
+        overallStatus: payload.overallStatus ?? "unknown",
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: `测试结果分析失败：${message}`,
+        summary: "测试结果分析失败。",
+        overallStatus: "unknown",
+      };
+    }
+  }
+
+  private toAgentResponse(payload?: PythonAgentPayload): AgentResponse {
+    return {
+      content: payload?.content ?? "Python 后端返回了空响应。",
+      mood: payload?.mood ?? "helpful",
+      actions: payload?.actions ?? [],
+      appliedActions: [],
+      requiresConfirmation: payload?.requiresConfirmation ?? false,
+      autoApplyActions: payload?.autoApplyActions ?? false,
+      proposalSummary: payload?.proposalSummary ?? "",
+      riskOverview: payload?.riskOverview,
+      testPlan: payload?.testPlan,
+      contextSelection: payload?.contextSelection,
+    };
+  }
+
+  private resolveGenerateEndpoint(): string {
+    const config = vscode.workspace.getConfiguration("vibeCodingAgent");
+    return config.get<string>("localModelEndpoint", "http://127.0.0.1:8000/generate");
+  }
+
+  private resolveStreamEndpoint(): string {
+    const endpoint = this.resolveGenerateEndpoint();
+    return endpoint.endsWith("/generate")
+      ? `${endpoint.slice(0, -"/generate".length)}/stream-generate`
+      : `${endpoint}/stream`;
+  }
+
+  private resolveTestAnalysisEndpoint(): string {
+    const endpoint = this.resolveGenerateEndpoint();
+    return endpoint.endsWith("/generate")
+      ? `${endpoint.slice(0, -"/generate".length)}/analyze-test-report`
+      : `${endpoint}/analyze-test-report`;
   }
 }

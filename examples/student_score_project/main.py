@@ -1,10 +1,3 @@
-"""
-示例工程入口。
-
-本文件负责组装演示用的学生成绩管理器，并输出最终报告。
-当前实现保持可运行，但仍保留了一些适合做项目级重构的改进点。
-"""
-
 from pathlib import Path
 
 try:
@@ -21,10 +14,22 @@ def build_demo_manager() -> StudentScoreManager:
     manager = StudentScoreManager()
     data_file = Path(__file__).with_name("sample_data.json")
 
-    manager.load_students(data_file)
-    manager.add_student("李博由", 95, 88, 93)
-    manager.add_student("陈裕森", 76, 81, 70)
-    manager.add_student("苗好田", 66, 72, 79)
+    if not data_file.exists():
+        print(f"文件 {data_file} 不存在，使用硬编码数据。")
+        # 使用硬编码数据
+        manager.add_student("李博由", 95, 88, 93)
+        manager.add_student("陈裕森", 76, 81, 70)
+        manager.add_student("苗好田", 66, 72, 79)
+    else:
+        try:
+            manager.load_students(data_file)
+        except Exception as e:
+            print(f"加载文件 {data_file} 时出错: {e}")
+            # 使用硬编码数据
+            manager.add_student("李博由", 95, 88, 93)
+            manager.add_student("陈裕森", 76, 81, 70)
+            manager.add_student("苗好田", 66, 72, 79)
+
     return manager
 
 

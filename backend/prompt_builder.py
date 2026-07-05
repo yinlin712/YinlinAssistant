@@ -72,6 +72,7 @@ def build_user_prompt(
     context: AgentContextModel,
     current_notes: str,
     conversation_history: list[ConversationTurnModel] | None = None,
+    attention_context_text: str = "",
 ) -> str:
     selected = context.selectedText.strip() if context.selectedText else "(none)"
     workspace_root = context.workspaceRoot or "(none)"
@@ -92,6 +93,8 @@ def build_user_prompt(
         f"- Selected text:\n{selected}\n\n"
         f"- Document excerpt:\n{document if document else '(empty)'}\n\n"
         f"{_build_conversation_history_block(conversation_history)}"
+        "Attention-selected context:\n"
+        f"{attention_context_text or '(none)'}\n\n"
         "Current-file analysis:\n"
         f"{current_notes}\n\n"
         "Response goals:\n"
@@ -112,6 +115,7 @@ def build_workspace_action_prompt(
     workspace_result: WorkspaceSearchResult,
     semantic_retrieval_text: str = "",
     conversation_history: list[ConversationTurnModel] | None = None,
+    attention_context_text: str = "",
 ) -> str:
     selected = context.selectedText.strip() if context.selectedText else "(none)"
     workspace_root = context.workspaceRoot or "(none)"
@@ -139,6 +143,8 @@ def build_workspace_action_prompt(
         f"{workspace_result.to_prompt_text()}\n\n"
         "Semantic retrieval evidence:\n"
         f"{semantic_retrieval_text or '(none)'}\n\n"
+        "Attention-selected context:\n"
+        f"{attention_context_text or '(none)'}\n\n"
         "Current active file analysis:\n"
         f"{current_notes}\n\n"
         "Current active file reference content:\n"
@@ -170,6 +176,7 @@ def build_workspace_action_repair_prompt(
     workspace_result: WorkspaceSearchResult,
     semantic_retrieval_text: str,
     previous_output: str,
+    attention_context_text: str = "",
 ) -> str:
     base_prompt = build_workspace_action_prompt(
         prompt,
@@ -177,6 +184,7 @@ def build_workspace_action_repair_prompt(
         current_notes,
         workspace_result,
         semantic_retrieval_text,
+        attention_context_text=attention_context_text,
     )
     return (
         f"{base_prompt}\n\n"
@@ -407,3 +415,55 @@ def _build_conversation_history_block(
         lines.append(f"- {speaker}: {turn.content.strip()}")
 
     return "\n".join(lines) + "\n\n"
+
+
+def build_test_analysis_prompt(
+    prompt: str,
+    context: AgentContextModel,
+    modified_files: list[str],
+    executions: list[dict[str, object]],
+) -> str:
+    """
+    为测试结果解释阶段构造统一提示词。
+    """
+
+    workspace_root = context.workspaceRoot or "(none)"
+    active_file = context.activeFile or "(none)"
+    modified_file_text = "、".join(modified_files[:8]) if modified_files else "(none)"
+
+    execution_blocks: list[str] = []
+    for index, item in enumerate(executions, start=1):
+        stdout = _truncate_text(str(item.get("stdout", "")), 2400)
+        stderr = _truncate_text(str(item.get("stderr", "")), 1800)
+        execution_blocks.append(
+            f"[Execution {index}]\n"
+            f"- Command: {item.get('command', '')}\n"
+            f"- Purpose: {item.get('purpose', '')}\n"
+            f"- Kind: {item.get('kind', '')}\n"
+            f"- Exit code: {item.get('exitCode', '')}\n"
+            f"- Duration ms: {item.get('durationMs', '')}\n"
+            f"- Stdout:\n{stdout if stdout else '(empty)'}\n"
+            f"- Stderr:\n{stderr if stderr else '(empty)'}"
+        )
+
+    execution_text = "\n\n".join(execution_blocks) if execution_blocks else "(none)"
+
+    return (
+        "Task:\n"
+        "You are analyzing the test and validation results after Code Agent modified a project.\n"
+        "You must explain the result in Chinese, keep it concise, and be practical.\n\n"
+        "Original user request:\n"
+        f"{prompt.strip()}\n\n"
+        "Workspace context:\n"
+        f"- Workspace root: {workspace_root}\n"
+        f"- Active file: {active_file}\n"
+        f"- Modified files: {modified_file_text}\n\n"
+        "Executed commands and outputs:\n"
+        f"{execution_text}\n\n"
+        "Response goals:\n"
+        "1. Judge whether the current modification passed verification.\n"
+        "2. Point out the most important failing command if any.\n"
+        "3. Explain the likely root cause based on the outputs.\n"
+        "4. Give the next recommended step.\n"
+        "5. Use Chinese headings and markdown bullet points when useful.\n"
+    )

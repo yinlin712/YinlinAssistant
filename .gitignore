@@ -27,3 +27,16 @@ outputs/
 .env
 .env.*
 airi/
+
+# Local thesis, presentation, and generated review artifacts
+.tmp/
+presentation/
+docs/img/
+docs/*.doc
+docs/*.docx
+docs/*.pdf
+docs/*.png
+docs/*.pptx
+docs/*核查稿.md
+docs/~$*
+基于 Embedding 与多头注意力重排的 Agent 上下文选择模块更新日志.md

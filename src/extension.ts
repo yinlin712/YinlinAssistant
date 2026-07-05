@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { EditorDiffPreviewService } from "./core/editorDiffPreview";
+import { VoiceServiceManager } from "./core/voiceServiceManager";
 import { AssistantPanelProvider } from "./panels/assistantPanel";
 
 // 文件说明：
@@ -13,9 +14,11 @@ export function activate(context: vscode.ExtensionContext): void {
   console.log("[Code Agent] Extension activated.");
 
   const diffPreviewService = new EditorDiffPreviewService();
+  const voiceServiceManager = new VoiceServiceManager(context.extensionUri);
   const panelProvider = new AssistantPanelProvider(context.extensionUri, diffPreviewService);
 
   context.subscriptions.push(
+    voiceServiceManager,
     diffPreviewService,
     vscode.workspace.registerTextDocumentContentProvider(
       EditorDiffPreviewService.scheme,
@@ -75,6 +78,22 @@ export function activate(context: vscode.ExtensionContext): void {
       panelProvider.refreshContext();
     })
   );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (
+        event.affectsConfiguration("vibeCodingAgent.enableVoiceInteraction")
+        || event.affectsConfiguration("vibeCodingAgent.voiceApiBaseUrl")
+        || event.affectsConfiguration("vibeCodingAgent.autoStartVoiceService")
+        || event.affectsConfiguration("vibeCodingAgent.voiceServicePath")
+        || event.affectsConfiguration("vibeCodingAgent.voiceServiceStartCommand")
+      ) {
+        void voiceServiceManager.ensureRunning();
+      }
+    }),
+  );
+
+  void voiceServiceManager.ensureRunning();
 
   if (context.extensionMode === vscode.ExtensionMode.Development) {
     setTimeout(async () => {

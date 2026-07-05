@@ -43,6 +43,68 @@ export interface AppliedAgentAction {
   summary: string;
 }
 
+export interface RiskOverview {
+  level: "low" | "medium" | "high";
+  score: number;
+  summary: string;
+  highlights: string[];
+}
+
+export interface TestCommandPlan {
+  command: string;
+  purpose: string;
+  kind: "test" | "validation";
+  confidence: "high" | "medium" | "low";
+}
+
+export interface TestPlan {
+  available: boolean;
+  summary: string;
+  commands: TestCommandPlan[];
+  machineLearningBasis?: string;
+  hasStandardTests: boolean;
+}
+
+export interface ContextSelectionMatch {
+  source: string;
+  identifier: string;
+  title: string;
+  chunkType: string;
+  location: string;
+  weight: number;
+  attentionWeight: number;
+  cosineSimilarity: number;
+  retrievalScore: number;
+  headWeights: number[];
+  excerpt: string;
+}
+
+export interface ContextSelection {
+  available: boolean;
+  summary: string;
+  embeddingProvider: string;
+  embeddingModel: string;
+  fallbackUsed: boolean;
+  warning: string;
+  headCount: number;
+  semanticFiles: string[];
+  matches: ContextSelectionMatch[];
+}
+
+export interface TestExecutionResult extends TestCommandPlan {
+  exitCode: number;
+  durationMs: number;
+  stdout: string;
+  stderr: string;
+  passed: boolean;
+}
+
+export interface TestAnalysisResult {
+  content: string;
+  summary: string;
+  overallStatus: "passed" | "failed" | "unknown";
+}
+
 // 类型说明：
 // 表示插件端在应用文件动作时产生的阶段性进度信息。
 export interface ActionExecutionProgress {
@@ -59,6 +121,9 @@ export interface AgentResponse {
   requiresConfirmation: boolean;
   autoApplyActions: boolean;
   proposalSummary?: string;
+  riskOverview?: RiskOverview;
+  testPlan?: TestPlan;
+  contextSelection?: ContextSelection;
 }
 
 // 类型说明：
@@ -78,6 +143,12 @@ export interface ModelProvider {
     conversationHistory: ConversationTurn[],
     handlers: AgentStreamHandlers,
   ): Promise<AgentResponse>;
+  analyzeTestReport?(
+    prompt: string,
+    context: AgentContext,
+    modifiedFiles: string[],
+    executions: TestExecutionResult[],
+  ): Promise<TestAnalysisResult>;
 }
 
 export interface ActionPreviewItem {

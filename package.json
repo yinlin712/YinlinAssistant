@@ -101,6 +101,46 @@
           "default": "",
           "description": "Optional absolute path to a local .vrm model file used by the Webview avatar shell."
         },
+        "vibeCodingAgent.enableVoiceInteraction": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enables microphone interaction for the avatar panel."
+        },
+        "vibeCodingAgent.voiceApiBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:3000",
+          "description": "Base URL for an AIRI-compatible speech transcription service. The extension will try /api/v1/openai/audio/transcriptions first and then /audio/transcriptions."
+        },
+        "vibeCodingAgent.voiceApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Bearer token used when calling the AIRI-compatible speech transcription API."
+        },
+        "vibeCodingAgent.voiceTranscriptionModel": {
+          "type": "string",
+          "default": "whisper-1",
+          "description": "Model name submitted to the AIRI-compatible speech transcription endpoint."
+        },
+        "vibeCodingAgent.voiceLanguage": {
+          "type": "string",
+          "default": "zh",
+          "description": "Optional language hint forwarded to the speech transcription endpoint."
+        },
+        "vibeCodingAgent.autoStartVoiceService": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically starts the local AIRI-compatible voice service when the extension activates and the configured endpoint is unavailable."
+        },
+        "vibeCodingAgent.voiceServicePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the local AIRI repository used for auto-starting the voice service. Leave empty to auto-detect ./airi."
+        },
+        "vibeCodingAgent.voiceServiceStartCommand": {
+          "type": "string",
+          "default": "pnpm dev:server",
+          "description": "Command used to auto-start the local AIRI-compatible voice service."
+        },
         "vibeCodingAgent.localModelEndpoint": {
           "type": "string",
           "default": "http://127.0.0.1:8000/generate",

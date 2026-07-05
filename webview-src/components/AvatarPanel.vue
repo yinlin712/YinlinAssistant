@@ -47,39 +47,24 @@ watch(
   { deep: true, immediate: true },
 );
 
-/**
- * 切换当前数字人预设。
- */
 function selectPreset(presetId: string): void {
   selectedPresetId.value = presetId;
 }
 
-/**
- * 重置数字人的旋转、抬升和拖拽状态。
- */
 function resetAvatarState(): void {
   stageRef.value?.resetInteraction();
 }
 
-/**
- * 重新播放欢迎语。
- */
 function replayGreeting(): void {
   stageRef.value?.replayGreeting();
 }
 
-/**
- * 更新背景透明度。
- */
 function handleBackgroundOpacityInput(event: Event): void {
   emit("update-visual-preferences", {
     backgroundOpacity: (event.target as HTMLInputElement).valueAsNumber,
   });
 }
 
-/**
- * 更新聊天层透明度。
- */
 function handleChatOpacityInput(event: Event): void {
   emit("update-visual-preferences", {
     chatOpacity: (event.target as HTMLInputElement).valueAsNumber,

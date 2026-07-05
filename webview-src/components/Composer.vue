@@ -1,20 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import type { PendingProposalPayload } from "../types";
 
 const props = defineProps<{
+  modelValue: string;
   proposal?: PendingProposalPayload | null;
   statusText?: string;
   isBusy?: boolean;
+  voiceEnabled?: boolean;
+  isVoiceRecording?: boolean;
+  isVoiceTranscribing?: boolean;
 }>();
 
 const emit = defineEmits<{
+  (event: "update:modelValue", value: string): void;
   (event: "submitPrompt", prompt: string): void;
   (event: "applyPendingActions"): void;
   (event: "discardPendingActions"): void;
+  (event: "toggleVoiceInput"): void;
 }>();
-
-const value = ref("");
 
 const proposalSummary = computed(() => {
   if (!props.proposal) {
@@ -28,27 +32,35 @@ const proposalSummary = computed(() => {
   return props.proposal.summary;
 });
 
-const normalizedStatusText = computed(() => {
-  return props.statusText || "待命";
+const normalizedStatusText = computed(() => props.statusText || "待命");
+
+const microphoneButtonLabel = computed(() => {
+  if (props.isVoiceTranscribing) {
+    return "识别中";
+  }
+
+  if (props.isVoiceRecording) {
+    return "结束";
+  }
+
+  return "麦克风";
 });
 
-/**
- * 提交当前输入框中的请求。
- */
-function submitCurrentValue() {
-  const nextValue = value.value.trim();
+function submitCurrentValue(): void {
+  const nextValue = props.modelValue.trim();
   if (!nextValue) {
     return;
   }
 
   emit("submitPrompt", nextValue);
-  value.value = "";
+  emit("update:modelValue", "");
 }
 
-/**
- * 支持 Enter 直接发送，Shift + Enter 换行。
- */
-function handleKeyDown(event: KeyboardEvent) {
+function handleInput(event: Event): void {
+  emit("update:modelValue", (event.target as HTMLTextAreaElement).value);
+}
+
+function handleKeyDown(event: KeyboardEvent): void {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     submitCurrentValue();
@@ -85,12 +97,26 @@ function handleKeyDown(event: KeyboardEvent) {
     </div>
 
     <div class="composer-body">
-      <textarea
-        v-model="value"
-        class="composer-textarea"
-        placeholder="输入需求，例如：解释这个函数；帮我继续封装这个函数；请检索整个项目并规划一组多文件修改。"
-        @keydown="handleKeyDown"
-      />
+      <div class="composer-input-shell">
+        <textarea
+          :value="props.modelValue"
+          class="composer-textarea"
+          placeholder="输入需求，例如：解释这个函数；帮我继续封装这个函数；请检索整个项目并规划一组多文件修改。"
+          @input="handleInput"
+          @keydown="handleKeyDown"
+        />
+        <button
+          v-if="props.voiceEnabled"
+          type="button"
+          class="composer-microphone"
+          :class="{ 'is-recording': props.isVoiceRecording, 'is-transcribing': props.isVoiceTranscribing }"
+          :disabled="props.isVoiceTranscribing"
+          @click="emit('toggleVoiceInput')"
+        >
+          {{ microphoneButtonLabel }}
+        </button>
+      </div>
+
       <button type="submit" class="composer-submit" aria-label="发送">
         发送
       </button>

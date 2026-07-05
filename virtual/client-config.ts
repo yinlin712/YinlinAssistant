@@ -1,4 +1,9 @@
-import type { AvatarConfig, AvatarMode, AvatarPresetConfig } from "../webview-src/types";
+import type {
+  AvatarConfig,
+  AvatarMode,
+  AvatarPresetConfig,
+  VoiceInteractionConfig,
+} from "../webview-src/types";
 
 const DEFAULT_AVATAR_MODE: AvatarMode = "vrm";
 
@@ -27,6 +32,39 @@ export function readAvatarConfig(): AvatarConfig {
     enabled: true,
     mode: DEFAULT_AVATAR_MODE,
     presets: [],
+  };
+}
+
+/**
+ * 读取 Webview 页面中注入的语音交互配置。
+ */
+export function readVoiceInteractionConfig(): VoiceInteractionConfig {
+  const jsonElement = document.getElementById("code-agent-voice-config");
+  if (jsonElement?.textContent) {
+    try {
+      const parsed = JSON.parse(jsonElement.textContent) as Partial<VoiceInteractionConfig>;
+      return {
+        enabled: parsed.enabled !== false,
+        baseUrl: parsed.baseUrl?.trim() || "http://127.0.0.1:3000",
+        apiKey: parsed.apiKey?.trim() || "",
+        model: parsed.model?.trim() || "whisper-1",
+        language: parsed.language?.trim() || "zh",
+        autoSubmit: parsed.autoSubmit !== false,
+        autoSpeakReplies: parsed.autoSpeakReplies !== false,
+      };
+    } catch (error) {
+      console.error("[Code Agent] Failed to parse voice config.", error);
+    }
+  }
+
+  return {
+    enabled: true,
+    baseUrl: "http://127.0.0.1:3000",
+    apiKey: "",
+    model: "whisper-1",
+    language: "zh",
+    autoSubmit: true,
+    autoSpeakReplies: true,
   };
 }
 
